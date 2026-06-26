@@ -9,10 +9,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const thought = await getThought(id);
     if (!thought) {
       return NextResponse.json({ error: "Thought not found" }, { status: 404 });

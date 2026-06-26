@@ -88,9 +88,10 @@ async function graphRequest(
 
 // --- OAuth ---------------------------------------------------------------
 
-/** Build the Threads authorize URL for the connect flow. */
-export function authorizeUrl(state: string): string {
-  const { appId, redirectUri } = threadsConfig();
+/** Build the Threads authorize URL for the connect flow. The redirect URI is
+ * supplied by the caller (derived from the request) so it matches the callback. */
+export function authorizeUrl(state: string, redirectUri: string): string {
+  const { appId } = threadsConfig();
   const params = new URLSearchParams({
     client_id: appId,
     redirect_uri: redirectUri,
@@ -109,9 +110,10 @@ export function authorizeUrl(state: string): string {
  * token is done by the callback route (updateTokenState), not here.
  */
 export async function exchangeCodeForLongLived(
-  code: string
+  code: string,
+  redirectUri: string
 ): Promise<{ token: string; userId: string }> {
-  const { appId, appSecret, redirectUri } = threadsConfig();
+  const { appId, appSecret } = threadsConfig();
 
   // Step 1: short-lived token. This endpoint expects form-encoded params.
   const form = new URLSearchParams({

@@ -1,6 +1,6 @@
 // GET /api/status — dashboard data: pool stats, recent posts, token health,
-// current config, and the next scheduled run (next 00:00 UTC). Gated by
-// Cloudflare Access (middleware); reads only — never mutates.
+// current config, and the next scheduled run (next 00:00 UTC). Reads only —
+// never mutates.
 
 import { NextResponse } from "next/server";
 import { getConfig, getTokenState, listPosts, poolStats } from "@/lib/firestore";

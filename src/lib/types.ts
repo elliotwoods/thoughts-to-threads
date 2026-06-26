@@ -35,8 +35,6 @@ export interface Thought {
   listId: string;
   /** UI: exclude from selection */
   skip: boolean;
-  /** UI: force next */
-  pin: boolean;
   /** Idempotency lock, ISO string or null */
   lock: string | null;
   /** Derived from createdAt UTC year */
@@ -70,6 +68,8 @@ export interface AppConfig {
   paused: boolean;
   timezone: string;
   postTimeJitter: boolean;
+  /** Target length of the "Up Next" queue; it auto-fills to this size. */
+  queueSize: number;
   /**
    * ISO of the last "pool exhausted" alert, used to debounce repeated alerts
    * (otherwise a daily cron would alert every run once the pool empties). Null
@@ -87,6 +87,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   paused: false,
   timezone: "Asia/Seoul",
   postTimeJitter: false,
+  queueSize: 10,
   lastExhaustionNotifiedAt: null,
 };
 

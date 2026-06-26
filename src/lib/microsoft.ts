@@ -23,9 +23,10 @@ function authorityBase(): string {
   return `${AUTHORITY}/${encodeURIComponent(tenant)}/oauth2/v2.0`;
 }
 
-/** Build the Microsoft consent URL (§7.1). */
-export function authorizeUrl(state: string): string {
-  const { clientId, redirectUri } = msConfig();
+/** Build the Microsoft consent URL (§7.1). The redirect URI is supplied by the
+ * caller (derived from the request) so it matches the callback exactly. */
+export function authorizeUrl(state: string, redirectUri: string): string {
+  const { clientId } = msConfig();
   const params = new URLSearchParams({
     client_id: clientId,
     response_type: "code",
@@ -70,11 +71,13 @@ async function postToken(body: URLSearchParams): Promise<TokenResponse> {
   return json;
 }
 
-/** Exchange an authorization code for a refresh token (callback flow). */
+/** Exchange an authorization code for a refresh token (callback flow). The
+ * redirect URI must match the one used to obtain the code. */
 export async function exchangeCode(
-  code: string
+  code: string,
+  redirectUri: string
 ): Promise<{ refreshToken: string }> {
-  const { clientId, clientSecret, redirectUri } = msConfig();
+  const { clientId, clientSecret } = msConfig();
   const body = new URLSearchParams({
     client_id: clientId,
     client_secret: clientSecret,
@@ -216,9 +219,13 @@ export async function syncTasks(
   // Derive the year suffix in the user's configured timezone (read once).
   const { timezone } = await getConfig();
 
+  // The personal/consumer To Do endpoint (Exchange RequestBroker) rejects a
+  // multi-field $select with "RequestBroker--ParseUri" — only a single field or
+  // no $select works. So we omit $select and read the full task objects (we only
+  // need id/title/status/body/createdDateTime, all present anyway). The list ID
+  // is opaque base64 placed in the path verbatim.
   let url: string | undefined =
-    `${GRAPH}/me/todo/lists/${encodeURIComponent(listId)}/tasks` +
-    `?$select=id,title,status,body,createdDateTime,lastModifiedDateTime&$top=100`;
+    `${GRAPH}/me/todo/lists/${listId}/tasks?$top=100`;
 
   while (url) {
     const page: GraphCollection<TodoTask> = await graphGet(url, accessToken);
@@ -269,9 +276,8 @@ export async function completeTask(
   listId: string,
   taskId: string
 ): Promise<void> {
-  const url = `${GRAPH}/me/todo/lists/${encodeURIComponent(
-    listId
-  )}/tasks/${encodeURIComponent(taskId)}`;
+  // Opaque base64 list/task IDs go in the path verbatim.
+  const url = `${GRAPH}/me/todo/lists/${listId}/tasks/${taskId}`;
   const res = await fetch(url, {
     method: "PATCH",
     headers: {

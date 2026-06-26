@@ -22,6 +22,7 @@ import {
 const THOUGHTS = "thoughts";
 const POSTS = "posts";
 const CONFIG_DOC = ["config", "app"] as const;
+const QUEUE_DOC = ["config", "queue"] as const;
 const TOKENS_DOC = ["secrets", "tokens"] as const;
 
 // --- timestamp helpers ---------------------------------------------------
@@ -87,6 +88,19 @@ export async function updateConfig(
   }
   await db().doc(CONFIG_DOC.join("/")).set(clean, { merge: true });
   return getConfig();
+}
+
+// --- queue order ---------------------------------------------------------
+
+/** Ordered list of thought ids for the "Up Next" queue (config/queue.order). */
+export async function getQueueOrder(): Promise<string[]> {
+  const snap = await db().doc(QUEUE_DOC.join("/")).get();
+  const order = snap.data()?.order;
+  return Array.isArray(order) ? (order.filter((x) => typeof x === "string") as string[]) : [];
+}
+
+export async function setQueueOrder(order: string[]): Promise<void> {
+  await db().doc(QUEUE_DOC.join("/")).set({ order }, { merge: true });
 }
 
 // --- tokens --------------------------------------------------------------
@@ -160,7 +174,6 @@ function mapThought(id: string, d: DocumentData): Thought {
     lastError: d.lastError ?? null,
     listId: d.listId ?? "",
     skip: Boolean(d.skip),
-    pin: Boolean(d.pin),
     lock: toIso(d.lock),
     year: typeof d.year === "number" ? d.year : null,
   };
@@ -210,7 +223,6 @@ export async function setThoughtFromTask(input: SetThoughtInput): Promise<void> 
         status: importStatus,
         attempts: 0,
         skip: false,
-        pin: false,
         lock: null,
         publishedAt: null,
         threadsPostId: null,

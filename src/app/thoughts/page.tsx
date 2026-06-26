@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PostPreview from "@/app/components/PostPreview";
+import UpNext, { type UpNextHandle } from "@/app/components/UpNext";
 import type { Thought } from "@/lib/types";
 
 // /api/thoughts returns each thought with a `preview: string[]` added
@@ -21,6 +22,7 @@ export default function ThoughtsPage() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const upNextRef = useRef<UpNextHandle>(null);
 
   const load = useCallback(async () => {
     try {
@@ -47,20 +49,43 @@ export default function ThoughtsPage() {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const doToggle = useCallback(
-    async (id: string, action: "skip" | "pin") => {
+  const doSkip = useCallback(
+    async (id: string) => {
       setBusy((prev) => ({ ...prev, [id]: true }));
       try {
-        const res = await fetch(`/api/thoughts/${id}/${action}`, {
-          method: "POST",
-        });
+        const res = await fetch(`/api/thoughts/${id}/skip`, { method: "POST" });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || `Request failed (${res.status})`);
         }
         await load();
+        await upNextRef.current?.refresh();
       } catch (e) {
-        setError(e instanceof Error ? e.message : `Failed to toggle ${action}`);
+        setError(e instanceof Error ? e.message : "Failed to toggle skip");
+      } finally {
+        setBusy((prev) => ({ ...prev, [id]: false }));
+      }
+    },
+    [load]
+  );
+
+  const doQueue = useCallback(
+    async (id: string, position: "next" | "last") => {
+      setBusy((prev) => ({ ...prev, [id]: true }));
+      try {
+        const res = await fetch(`/api/queue/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ position }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Request failed (${res.status})`);
+        }
+        await upNextRef.current?.refresh();
+        await load(); // queuing clears skip — reflect it in the table
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to queue thought");
       } finally {
         setBusy((prev) => ({ ...prev, [id]: false }));
       }
@@ -78,6 +103,8 @@ export default function ThoughtsPage() {
 
       {error && <div className="banner banner-error">{error}</div>}
 
+      <UpNext ref={upNextRef} />
+
       <div className="card">
         {loading ? (
           <p className="muted">Loading thoughts…</p>
@@ -94,7 +121,7 @@ export default function ThoughtsPage() {
                 <th>Title</th>
                 <th style={{ width: "70px" }}>Year</th>
                 <th style={{ width: "70px" }}>Posts</th>
-                <th style={{ width: "170px" }}>Actions</th>
+                <th style={{ width: "230px" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -110,8 +137,9 @@ export default function ThoughtsPage() {
                     isBusy={isBusy}
                     segCount={segCount}
                     onToggleExpanded={() => toggleExpanded(t.id)}
-                    onSkip={() => doToggle(t.id, "skip")}
-                    onPin={() => doToggle(t.id, "pin")}
+                    onSkip={() => doSkip(t.id)}
+                    onQueueNext={() => doQueue(t.id, "next")}
+                    onQueueLast={() => doQueue(t.id, "last")}
                   />
                 );
               })}
@@ -130,7 +158,8 @@ function ThoughtRowGroup({
   segCount,
   onToggleExpanded,
   onSkip,
-  onPin,
+  onQueueNext,
+  onQueueLast,
 }: {
   t: ThoughtRow;
   isOpen: boolean;
@@ -138,8 +167,11 @@ function ThoughtRowGroup({
   segCount: number;
   onToggleExpanded: () => void;
   onSkip: () => void;
-  onPin: () => void;
+  onQueueNext: () => void;
+  onQueueLast: () => void;
 }) {
+  // Only unpublished, non-skipped thoughts can be queued.
+  const canQueue = t.status === "unpublished" && !t.skip;
   return (
     <>
       <tr>
@@ -159,16 +191,39 @@ function ThoughtRowGroup({
           </span>
         </td>
         <td>
-          <div>{t.title || <span className="dim">(untitled)</span>}</div>
-          <div className="row-actions" style={{ marginTop: 4 }}>
-            {t.pin && <span className="badge badge-unpublished">Pinned</span>}
-            {t.skip && <span className="badge">Skipped</span>}
+          <div className="literary">
+            {t.title || <span className="dim">(untitled)</span>}
           </div>
+          {t.skip && (
+            <div className="row-actions" style={{ marginTop: 4 }}>
+              <span className="badge">Skipped</span>
+            </div>
+          )}
         </td>
         <td className="mono">{t.year ?? "—"}</td>
         <td className="mono">{segCount}</td>
         <td>
           <div className="row-actions">
+            {canQueue && (
+              <>
+                <button
+                  className="btn btn-sm"
+                  onClick={onQueueNext}
+                  disabled={isBusy}
+                  title="Put at the front of the queue"
+                >
+                  Queue next
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={onQueueLast}
+                  disabled={isBusy}
+                  title="Put at the back of the queue"
+                >
+                  Queue last
+                </button>
+              </>
+            )}
             <button
               className="btn btn-sm"
               onClick={onSkip}
@@ -177,20 +232,15 @@ function ThoughtRowGroup({
             >
               {t.skip ? "Unskip" : "Skip"}
             </button>
-            <button
-              className="btn btn-sm"
-              onClick={onPin}
-              disabled={isBusy}
-              title="Force next"
-            >
-              {t.pin ? "Unpin" : "Pin"}
-            </button>
           </div>
         </td>
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={6} style={{ background: "var(--bg-elevated)" }}>
+          <td
+            colSpan={6}
+            style={{ background: "var(--paper-tint)", padding: "20px 24px" }}
+          >
             <div style={{ fontSize: 13 }} className="muted">
               Live preview — exactly how this will publish to Threads
               {segCount > 1 && ` (${segCount}-post reply chain)`}:

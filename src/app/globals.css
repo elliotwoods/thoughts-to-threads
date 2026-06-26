@@ -1,26 +1,28 @@
 /* =============================================================================
-   Thoughts to Threads - global styles
-   Minimal, dark-friendly, no UI library.
+   Thoughts to Threads — global styles
+   Museum-elegant, black-on-white, literary. Warm paper + ink, an EB Garamond
+   serif for the writing and a Hanken Grotesk sans for the chrome. Whitespace
+   and hairline rules instead of cards and shadows. A single oxblood accent,
+   used only for things that need attention.
+
+   Font families arrive as CSS variables (--serif / --sans) from next/font,
+   injected on <html> in layout.tsx — so they are intentionally not declared
+   in :root below.
    ========================================================================== */
 
 :root {
-  --bg: #0f1115;
-  --bg-elevated: #171a21;
-  --bg-card: #1b1f27;
-  --border: #2a2f3a;
-  --border-strong: #3a4150;
-  --text: #e6e9ef;
-  --text-muted: #9aa3b2;
-  --text-dim: #6b7280;
-  --accent: #5b8cff;
-  --accent-hover: #7aa2ff;
-  --success: #34d399;
-  --warning: #fbbf24;
-  --danger: #f87171;
-  --radius: 10px;
-  --radius-sm: 6px;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-  --maxw: 980px;
+  --paper: #fcfbf8;
+  --paper-tint: #f4f1e8; /* faint inset (expanded preview row) */
+  --ink: #16150f;
+  --ink-soft: #44423b;
+  --muted: #6e6b62;
+  --faint: #9a968c;
+  --hairline: #e5e1d8;
+  --hairline-strong: #cfc9bc;
+  --alert: #8a2c2c; /* oxblood — problems only */
+  --radius: 2px;
+  --maxw: 960px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * {
@@ -34,27 +36,33 @@ body {
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
-  font-size: 15px;
-  line-height: 1.5;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: none;
 }
 a:hover {
-  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 /* --- Layout --------------------------------------------------------------- */
 .site-header {
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -62,94 +70,130 @@ a:hover {
 .site-header-inner {
   max-width: var(--maxw);
   margin: 0 auto;
-  padding: 0 20px;
-  height: 56px;
+  padding: 0 24px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
 .brand {
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--text);
+  font-family: var(--serif), Georgia, serif;
+  font-weight: 500;
+  font-size: 19px;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+.brand:hover {
+  text-decoration: none;
 }
 .nav {
   display: flex;
-  gap: 18px;
+  gap: 26px;
 }
 .nav a {
-  color: var(--text-muted);
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
 .nav a:hover {
-  color: var(--text);
+  color: var(--ink);
+  text-decoration: none;
 }
 .container {
   max-width: var(--maxw);
   margin: 0 auto;
-  padding: 28px 20px 80px;
+  padding: 56px 24px 120px;
 }
 
 /* --- Headings ------------------------------------------------------------- */
 h1 {
-  font-size: 24px;
-  margin: 0 0 4px;
+  font-family: var(--serif), Georgia, serif;
+  font-weight: 500;
+  font-size: 38px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  margin: 0 0 10px;
 }
+/* section headings read as small museum captions */
 h2 {
-  font-size: 18px;
-  margin: 0 0 12px;
+  font-family: var(--sans), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  margin: 0 0 20px;
 }
 .page-sub {
-  color: var(--text-muted);
-  margin: 0 0 24px;
+  font-family: var(--serif), Georgia, serif;
+  font-style: italic;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin: 0 0 44px;
 }
 
-/* --- Cards ---------------------------------------------------------------- */
+/* literary body — the writing itself, set in serif */
+.literary {
+  font-family: var(--serif), Georgia, serif;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+/* --- Cards (open blocks, divided by hairlines) --------------------------- */
 .card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 18px;
-  box-shadow: var(--shadow);
+  padding: 36px 0;
+  border-top: 1px solid var(--hairline);
 }
 .card + .card {
-  margin-top: 18px;
+  margin-top: 0;
 }
 .grid {
   display: grid;
-  gap: 16px;
+  gap: 32px;
 }
 .grid-3 {
   grid-template-columns: repeat(3, 1fr);
 }
 .grid-4 {
   grid-template-columns: repeat(4, 1fr);
-}
-@media (max-width: 720px) {
-  .grid-3,
-  .grid-4 {
-    grid-template-columns: 1fr 1fr;
-  }
+  gap: 0;
 }
 
-/* --- Stat tiles ----------------------------------------------------------- */
+/* --- Stat ledger ---------------------------------------------------------- */
 .stat {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  text-align: center;
+  text-align: left;
 }
+.grid-4 .stat {
+  border-left: 1px solid var(--hairline);
+  padding-left: 24px;
+}
+.grid-4 .stat:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+.num,
 .stat .num {
-  font-size: 28px;
-  font-weight: 700;
+  font-family: var(--serif), Georgia, serif;
+  font-weight: 500;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-feature-settings: "lnum" 1, "tnum" 1;
 }
+.label,
 .stat .label {
-  color: var(--text-muted);
-  font-size: 13px;
+  display: block;
+  font-family: var(--sans), system-ui, sans-serif;
+  color: var(--muted);
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.14em;
+  margin-top: 10px;
 }
 
 /* --- Buttons -------------------------------------------------------------- */
@@ -157,45 +201,54 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-elevated);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 8px 14px;
-  font-size: 14px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  padding: 9px 16px;
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .btn:hover {
-  background: #20242d;
-  color: var(--text);
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
 }
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
+.btn:disabled:hover {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0b0e14;
-  font-weight: 600;
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
 }
 .btn-primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: #0b0e14;
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.btn-sm {
+  padding: 3px 9px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
 }
 .btn-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 13px;
-}
 
-/* --- Tables -------------------------------------------------------------- */
+/* --- Tables --------------------------------------------------------------- */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -204,185 +257,372 @@ table {
 th,
 td {
   text-align: left;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 24px 14px 0;
+  border-bottom: 1px solid var(--hairline);
   vertical-align: top;
 }
 th {
-  color: var(--text-muted);
+  font-family: var(--sans), system-ui, sans-serif;
+  color: var(--muted);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.14em;
+  padding-bottom: 12px;
 }
 tr:last-child td {
   border-bottom: none;
 }
 
-/* --- Badges -------------------------------------------------------------- */
+/* --- Badges (caption markers, no pills) ---------------------------------- */
 .badge {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 11px;
   font-weight: 600;
-  border: 1px solid var(--border-strong);
-  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
 }
+.badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--faint);
+  background: transparent;
+}
+/* connected / published — filled ink dot */
+.badge-published::before {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+/* unpublished — open ink ring */
 .badge-unpublished {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--ink-soft);
 }
-.badge-published {
-  color: var(--success);
-  border-color: var(--success);
+.badge-unpublished::before {
+  border-color: var(--ink);
 }
-.badge-failed {
-  color: var(--danger);
-  border-color: var(--danger);
-}
+/* archived — faint */
 .badge-archived {
-  color: var(--text-dim);
-  border-color: var(--border-strong);
+  color: var(--faint);
+}
+/* failed / not connected — oxblood cross */
+.badge-failed {
+  color: var(--alert);
+}
+.badge-failed::before {
+  content: "\00d7";
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--alert);
+  font-size: 13px;
+  line-height: 1;
 }
 
-/* --- Banners ------------------------------------------------------------- */
+/* --- Banners (quiet left rule) ------------------------------------------- */
 .banner {
-  border-radius: var(--radius-sm);
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  border: 1px solid;
+  padding: 14px 0 14px 18px;
+  margin-bottom: 20px;
+  border-left: 2px solid var(--hairline-strong);
+  color: var(--ink-soft);
+  font-size: 14px;
 }
-.banner-warn {
-  background: rgba(251, 191, 36, 0.08);
-  border-color: var(--warning);
-  color: var(--warning);
+.banner a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
+.banner-warn,
 .banner-error {
-  background: rgba(248, 113, 113, 0.08);
-  border-color: var(--danger);
-  color: var(--danger);
+  border-left-color: var(--alert);
+  color: var(--alert);
 }
 .banner-ok {
-  background: rgba(52, 211, 153, 0.08);
-  border-color: var(--success);
-  color: var(--success);
+  border-left-color: var(--ink);
+  color: var(--ink-soft);
 }
 
-/* --- Forms --------------------------------------------------------------- */
+/* --- Forms (editorial underlines) ---------------------------------------- */
 label {
   display: block;
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  margin-bottom: 10px;
 }
 .field {
-  margin-bottom: 16px;
+  margin-bottom: 28px;
 }
 input[type="text"],
 input[type="number"],
 select {
   width: 100%;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  font-size: 14px;
+  background: transparent;
+  color: var(--ink);
+  border: none;
+  border-bottom: 1px solid var(--hairline-strong);
+  border-radius: 0;
+  padding: 8px 0;
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 16px;
+}
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+  outline: none;
+  border-bottom-color: var(--ink);
+}
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 22px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2316150f' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 2px center;
+  background-size: 10px 6px;
 }
 input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  accent-color: var(--ink);
 }
 .checkbox-field {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 20px;
 }
 .checkbox-field label {
   margin: 0;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 14px;
+  color: var(--ink-soft);
 }
 
-/* --- Muted / utility text ----------------------------------------------- */
+/* --- Utility text --------------------------------------------------------- */
 .muted {
-  color: var(--text-muted);
+  color: var(--muted);
 }
 .dim {
-  color: var(--text-dim);
+  color: var(--faint);
 }
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 13px;
+  color: var(--ink-soft);
 }
 .row-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* =========================================================================
-   POST PREVIEW — phone-like thread bubbles (requirement 4)
+   POST PREVIEW — manuscript placards (the signature element)
+   Each Threads post reads as a printed excerpt: a marginal folio number, the
+   text set in serif, and a hairline-divided caption. Replaces the old chat
+   bubbles. Byte-for-byte the segments that will publish.
    ========================================================================= */
 .thread-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 12px;
-  padding-left: 6px;
+  margin-top: 20px;
 }
-.post-bubble {
-  position: relative;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: 16px;
-  padding: 12px 14px;
-  max-width: 460px;
+.placard {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 0 20px;
+  padding: 22px 0;
+  border-top: 1px solid var(--hairline);
 }
-/* connecting line between chained reply posts */
-.post-bubble:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  left: 22px;
-  bottom: -12px;
-  width: 2px;
-  height: 12px;
-  background: var(--border-strong);
+.placard:first-child {
+  border-top: 0;
+  padding-top: 6px;
 }
-.post-bubble-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
+.placard-folio {
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+  padding-top: 5px;
+  font-feature-settings: "tnum" 1;
 }
-.post-bubble-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #0b0e14;
-  font-size: 12px;
-  font-weight: 700;
-}
-.post-bubble-count {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.post-bubble-count.over {
-  color: var(--danger);
-  font-weight: 700;
-}
-.post-bubble-text {
+.placard-text {
+  font-family: var(--serif), Georgia, serif;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 14px;
-  line-height: 1.55;
+}
+.placard-caption {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.placard-caption .sep {
+  color: var(--hairline-strong);
+}
+.placard-count.over {
+  color: var(--alert);
+  font-weight: 700;
 }
 .preview-empty {
-  color: var(--text-dim);
+  margin-top: 16px;
+  font-family: var(--serif), Georgia, serif;
   font-style: italic;
-  font-size: 13px;
+  font-size: 16px;
+  color: var(--muted);
+}
+
+/* =========================================================================
+   UP NEXT — the orderable publishing queue
+   A short, drag-reorderable list of what publishes next. Each entry is a
+   hairline-divided ledger row: a drag handle, a marginal folio number, the
+   title set in serif, and quiet actions. Auto-fills to queueSize; the head
+   publishes next.
+   ========================================================================= */
+.queue-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.queue-head h2 {
+  margin: 0;
+}
+.queue-note {
+  font-family: var(--serif), Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+.queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.queue-item {
+  display: grid;
+  grid-template-columns: 22px 32px 1fr auto;
+  align-items: start;
+  gap: 0 16px;
+  padding: 18px 0;
+  border-top: 1px solid var(--hairline);
+  background: var(--paper);
+}
+.queue-item:first-child {
+  border-top: 0;
+}
+.queue-item.dragging {
+  background: var(--paper-tint);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 0 var(--hairline-strong);
+  z-index: 1;
+}
+.queue-handle {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  cursor: grab;
+  color: var(--faint);
+  font-size: 16px;
+  line-height: 1.4;
+  touch-action: none;
+}
+.queue-handle:hover {
+  color: var(--ink);
+}
+.queue-handle:active {
+  cursor: grabbing;
+}
+.queue-folio {
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+  padding-top: 4px;
+  font-feature-settings: "tnum" 1;
+}
+.queue-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--muted);
+}
+.queue-meta .sep {
+  color: var(--hairline-strong);
+}
+.queue-remove {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* --- Motion / responsive -------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .grid-4 {
+    row-gap: 28px;
+  }
+  .grid-4 .stat:nth-child(odd) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .num,
+  .stat .num {
+    font-size: 34px;
+  }
+  .site-header-inner {
+    height: auto;
+    padding: 14px 20px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .nav {
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  .container {
+    padding: 36px 20px 90px;
+  }
+  h1 {
+    font-size: 30px;
+  }
+  .placard {
+    grid-template-columns: 30px 1fr;
+    gap: 0 14px;
+  }
 }

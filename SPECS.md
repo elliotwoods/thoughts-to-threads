@@ -25,7 +25,7 @@ A single-user service that pulls "thoughts" from a Microsoft To Do list and auto
 ## 1. Architecture overview
 
 ```
-Vercel Cron ──(daily GET)──▶ Next.js app on Vercel ◀──(dashboard)── Browser (Cloudflare Access)
+Vercel Cron ──(daily GET)──▶ Next.js app on Vercel ◀──(dashboard)── Browser
                                    │      │   │
               Microsoft Graph ◀────┘      │   └────▶ Threads Graph API
                  (To Do)                  ▼
@@ -42,11 +42,11 @@ One Next.js deployment is the only compute. It hosts the dashboard, the API rout
 | Concern | Choice | Why |
 |---|---|---|
 | App + API + OAuth + cron handler | Next.js (App Router) on Vercel | One repo, one deploy; serverless route handlers cover everything |
-| Scheduler | Vercel Cron → `GET /api/cron/tick` | Fewest moving parts. Daily is within Hobby limits. **Alt:** a Cloudflare Worker Cron Trigger calling the same route if you want sub-daily cadence or a randomised post time |
+| Scheduler | Vercel Cron → `GET /api/cron/tick` | Fewest moving parts. Daily is within Hobby limits |
 | Datastore | Firestore (Firebase Spark) | Free, generous, fine for a small pool; server access via Admin SDK |
 | Server ↔ Firestore | Firebase Admin SDK (service account) | Server is authoritative; all writes go through it |
-| Dashboard auth | Cloudflare Access in front of the deployment | Single-user gate, zero app code, DNS likely already on Cloudflare. **Alt:** Firebase Auth (Google) + email allowlist |
-| Live dashboard updates | Polling `GET /api/status` (default), or Ably push | Polling is plenty for a daily job. Ably optional for instant "just posted" toasts |
+| Dashboard auth | Single hard password (HTTP Basic Auth in edge middleware) | One env var, zero app code, gates the whole app + API. **Alt:** Firebase Auth (Google) + email allowlist |
+| Live dashboard updates | Polling `GET /api/status` | Polling is plenty for a daily job |
 | Token encryption | AES-256-GCM, key in env | Tokens rotate; never store them in plain env vars |
 
 ---
@@ -77,9 +77,8 @@ This is the trickiest dependency: **personal To Do data is delegated-only.** The
 3. Project settings → Service accounts → generate a private key. Use it for the Admin SDK env vars (3 fields below).
 4. (Only if you choose the Firebase Auth dashboard variant) enable Google sign-in and write security rules locking docs to your UID.
 
-### 3.4 Cloudflare Access
-1. Cloudflare Zero Trust → Access → Applications → add a self-hosted app for the deployment's hostname.
-2. Policy: allow only your email. (Optionally verify the `Cf-Access-Jwt-Assertion` header server-side in middleware for defence in depth.)
+### 3.4 Dashboard access
+The dashboard and its API are gated by a single hard password (`DASHBOARD_PASSWORD`) enforced as HTTP Basic Auth in the edge middleware: every request except `/api/cron/*` and static assets requires it; any username works, only the password is checked. Leave `DASHBOARD_PASSWORD` empty to disable the gate (e.g. local dev). For a per-user gate instead, adopt the Firebase Auth variant above.
 
 ---
 
@@ -107,8 +106,10 @@ FIREBASE_PROJECT_ID=
 FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=         # keep the \n escaping; unescape at runtime
 
+# Dashboard auth
+DASHBOARD_PASSWORD=           # hard password for the dashboard + API (HTTP Basic Auth); empty disables the gate
+
 # Optional
-ABLY_API_KEY=                 # only if using Ably push
 NOTIFY_WEBHOOK_URL=           # where re-auth / failure alerts POST to (e.g. a Slack/Discord webhook)
 ```
 
@@ -178,7 +179,7 @@ Append-only audit log.
 
 ## 6. Security model
 
-- **Dashboard gate:** Cloudflare Access (allowlist your email). Optionally validate `Cf-Access-Jwt-Assertion` in Next.js middleware.
+- **Dashboard gate:** single hard password (`DASHBOARD_PASSWORD`) enforced as HTTP Basic Auth in the edge middleware over the whole app + API (cron endpoint and static assets excepted). Empty disables the gate.
 - **Cron endpoint:** `GET /api/cron/tick` rejects any request whose `Authorization` header isn't `Bearer ${CRON_SECRET}`. Vercel attaches this automatically when `CRON_SECRET` is set.
 - **Token at rest:** encrypt `msRefreshToken` and `threadsToken` with AES-256-GCM before writing; decrypt only in memory when needed. Store `iv:authTag:ciphertext`.
 - **OAuth callbacks:** use a signed `state` param to prevent CSRF on the connect flows.
@@ -327,7 +328,6 @@ POST https://graph.threads.net/{userId}/threads_publish
      c. Publish (§7.5).
      d. On success: set status=published, threadsPostId, permalink, publishedAt;
         append posts/{}. If writeBackComplete → PATCH To Do task to completed.
-        Emit Ably event (optional).
      e. On failure: status stays unpublished (or failed after N attempts), record lastError,
         release lock.
 8. Return 200 with a summary.
@@ -377,7 +377,7 @@ Schedule is **UTC**. `0 0 * * *` = 09:00 KST. Adjust for your preferred Seoul ti
 
 ## 9. Web UI
 
-App Router pages, all behind the Cloudflare Access gate; data via `GET /api/status` (poll every ~10s) or Ably subscription.
+App Router pages; data via `GET /api/status` (poll every ~10s).
 
 - **`/` Dashboard** — pool counts (X unpublished / Y published / Z archived), next scheduled run, recent posts with permalinks, **token health** (MS refresh age, Threads token age + days-to-expiry, re-auth banners), and buttons: Sync now, Publish now, Pause/Resume.
 - **`/thoughts`** — table of synced thoughts with status; per-row Skip / Pin (force next).
@@ -406,11 +406,11 @@ App Router pages, all behind the Cloudflare Access gate; data via `GET /api/stat
 
 Each phase ends in something runnable and testable.
 
-1. **Skeleton.** Next.js + Firebase Admin init + env loading + Cloudflare Access. `GET /api/status` returns stub data. Deploy and confirm the gate works.
+1. **Skeleton.** Next.js + Firebase Admin init + env loading + password gate (middleware). `GET /api/status` returns stub data. Deploy and confirm the gate works.
 2. **Microsoft connect + sync.** OAuth start/callback, encrypted token storage, `POST /api/actions/sync`, list picker. `/thoughts` shows real tasks. *Test: tasks appear and re-sync is idempotent.*
 3. **Threads connect + manual publish.** OAuth + long-lived exchange, selection (§7.4), publish (§7.5), state update, locking (§7.7). `POST /api/actions/publish-now`. *Test: one real post goes out, status flips, no double-post on repeat click.*
 4. **Token refresh + cron.** Refresh logic for both providers, the full tick orchestration (§7.6), `vercel.json` cron, re-auth flags + alerting. *Test: tick runs end-to-end on schedule; token ages update.*
-5. **Polish.** Dashboard token-health + banners, pause/resume, exhaustion handling, write-back toggle, settings persistence, optional Ably push. *Test: pause stops posting; exhaustion behaves per config.*
+5. **Polish.** Dashboard token-health + banners, pause/resume, exhaustion handling, write-back toggle, settings persistence. *Test: pause stops posting; exhaustion behaves per config.*
 
 ---
 
@@ -419,8 +419,8 @@ Each phase ends in something runnable and testable.
 - **Completed-in-To-Do on import:** archive (default) vs treat as eligible.
 - **Exhaustion:** `stop` (default) vs `reshuffle`.
 - **Over-length text:** truncate to 500 (default) vs skip and flag.
-- **Live updates:** polling (default) vs Ably push vs Firebase-Auth + client Firestore listeners.
-- **Dashboard auth:** Cloudflare Access (default) vs Firebase Auth.
+- **Live updates:** polling (default) vs Firebase-Auth + client Firestore listeners.
+- **Dashboard auth:** single hard password / HTTP Basic Auth (default) vs Firebase Auth.
 - **Post time randomisation:** off (default) vs in-tick jitter vs probabilistic multi-run.
 
 ---

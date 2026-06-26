@@ -60,6 +60,16 @@ export async function PUT(req: Request) {
     if ("postTimeJitter" in b) {
       patch.postTimeJitter = Boolean(b.postTimeJitter);
     }
+    if ("queueSize" in b) {
+      const n = Number(b.queueSize);
+      if (!Number.isFinite(n) || n < 1) {
+        return NextResponse.json(
+          { error: "queueSize must be a number >= 1" },
+          { status: 400 }
+        );
+      }
+      patch.queueSize = Math.floor(n);
+    }
 
     const config = await updateConfig(patch);
     return NextResponse.json({ config });

@@ -165,6 +165,23 @@ export default function SettingsPage() {
           </div>
 
           <div className="field">
+            <label htmlFor="queueSize">Up Next queue size</label>
+            <input
+              id="queueSize"
+              type="number"
+              min={1}
+              max={50}
+              value={config.queueSize}
+              onChange={(e) =>
+                update(
+                  "queueSize",
+                  Math.max(1, parseInt(e.target.value, 10) || 1)
+                )
+              }
+            />
+          </div>
+
+          <div className="field">
             <label htmlFor="onExhaustion">On pool exhaustion</label>
             <select
               id="onExhaustion"

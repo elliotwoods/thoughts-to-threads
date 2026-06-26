@@ -7,7 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { exchangeCodeForLongLived } from "@/lib/threads";
 import { verifyState } from "@/lib/state";
 import { updateTokenState } from "@/lib/firestore";
-import { appBaseUrl } from "@/lib/env";
+import { baseUrlFromRequest, callbackUrl } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +33,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Throws if the state is invalid, tampered, or older than ~10 minutes.
     verifyState(state);
 
-    const { token, userId } = await exchangeCodeForLongLived(code);
+    // Must match the redirect URI used in /start; both derive from the request.
+    const { token, userId } = await exchangeCodeForLongLived(
+      code,
+      callbackUrl(req, "threads")
+    );
 
     await updateTokenState({
       threadsToken: token,
@@ -43,7 +47,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     return NextResponse.redirect(
-      new URL("/connections?threads=connected", appBaseUrl())
+      new URL("/connections?threads=connected", baseUrlFromRequest(req))
     );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Threads callback failed";

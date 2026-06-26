@@ -273,7 +273,7 @@ export default function DashboardPage() {
                         </span>
                       </td>
                       <td>
-                        {p.text}
+                        <span className="literary">{p.text}</span>
                         {p.segments && p.segments.length > 1 && (
                           <span className="dim">
                             {" "}

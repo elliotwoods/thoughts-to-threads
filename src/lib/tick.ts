@@ -1,8 +1,8 @@
 // Server-only orchestration for the scheduled tick (SPECS.md §7.6).
 //
 // Pulls everything together: token refresh (both providers), To Do sync,
-// no-repeat selection with pinned-first + exhaustion handling, transactional
-// locking, retry-safe two-step publish, and per-post write-back. Publishing
+// queue-driven selection (head of the "Up Next" queue) + exhaustion handling,
+// transactional locking, retry-safe two-step publish, and per-post write-back. Publishing
 // always goes through buildSegments(composeFullText(thought), thought.year) so
 // the year suffix (req. 1), multi-thread split (req. 2) and included note
 // (req. 3) are honoured at publish time — exactly what the UI previews (req. 4).
@@ -12,7 +12,6 @@ import {
   appendPost,
   getConfig,
   getTokenState,
-  listThoughts,
   releaseLock,
   reshufflePublished,
   updateConfig,
@@ -25,6 +24,7 @@ import {
   publishSegments,
 } from "./threads";
 import { buildSegments, composeFullText } from "./post";
+import { normalizeQueue, rotateToBack } from "./queue";
 import { notify } from "./notify";
 import type { AppConfig, Thought } from "./types";
 
@@ -36,23 +36,17 @@ const MAX_ATTEMPTS = 3;
 
 // --- selection (SPECS.md §7.4) ------------------------------------------
 
-/** Pick a random element of a non-empty array. */
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
 /**
- * Select the next thought to publish: pinned first, otherwise a random pick
- * over the unpublished, non-skipped pool. Returns null when the pool is empty
- * (after applying the configured exhaustion behaviour).
+ * Select the next thought to publish: the head of the normalized "Up Next"
+ * queue (which auto-fills from a random draw of the unpublished, non-skipped
+ * pool). Returns null when the pool is empty (after applying the configured
+ * exhaustion behaviour).
  */
 export async function selectThought(
   config: AppConfig
 ): Promise<Thought | null> {
-  const pool = await listThoughts({ status: "unpublished", skip: false });
-  const pinned = pool.find((t) => t.pin);
-  if (pinned) return pinned;
-  if (pool.length > 0) return pickRandom(pool);
+  const queue = await normalizeQueue(config);
+  if (queue.length > 0) return queue[0];
   return handleExhaustion(config);
 }
 
@@ -69,11 +63,8 @@ export async function handleExhaustion(
       `Thought pool exhausted; reshuffled ${n} published thought(s) back into the pool.`,
       { event: "reshuffle", count: n }
     );
-    const pool = await listThoughts({ status: "unpublished", skip: false });
-    const pinned = pool.find((t) => t.pin);
-    if (pinned) return pinned;
-    if (pool.length === 0) return null;
-    return pickRandom(pool);
+    const queue = await normalizeQueue(config);
+    return queue.length > 0 ? queue[0] : null;
   }
   // Default: stop. Debounce the alert so a daily cron doesn't fire every run
   // once the pool empties — notify at most once per ~20h (on entering the state).
@@ -191,6 +182,10 @@ export async function publishOne(
         patch.status = "failed";
         // Terminal: clear resume state so a future reshuffle starts clean.
         patch.publishedSegmentIds = [];
+      } else {
+        // Still retryable: rotate it to the back of the queue so a stuck head
+        // doesn't block the rest of a multi-post run. Best-effort.
+        await rotateToBack(thought.id).catch(() => {});
       }
       await updateThought(thought.id, patch);
       await releaseLock(thought.id);

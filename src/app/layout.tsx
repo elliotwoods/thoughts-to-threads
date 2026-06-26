@@ -1,6 +1,23 @@
 import type { Metadata } from "next";
+import { EB_Garamond, Hanken_Grotesk } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
+
+// The writing is set in EB Garamond (serif), the chrome in Hanken Grotesk
+// (sans). Both are exposed to globals.css as --serif / --sans.
+const serif = EB_Garamond({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  style: ["normal", "italic"],
+  variable: "--serif",
+  display: "swap",
+});
+const sans = Hanken_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Thoughts to Threads",
@@ -14,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${serif.variable} ${sans.variable}`}>
       <body>
         <header className="site-header">
           <div className="site-header-inner">

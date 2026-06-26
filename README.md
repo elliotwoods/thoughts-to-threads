@@ -2,12 +2,14 @@
 
 A single-user service that pulls "thoughts" from a Microsoft To Do list and
 auto-publishes one per day to [Threads](https://www.threads.net), selecting
-randomly and never repeating until the pool is exhausted. It ships with a gated
+randomly and never repeating until the pool is exhausted. It ships with a
 web dashboard for status, history, manual control, settings, and OAuth connect.
 
 Built with Next.js (App Router) + TypeScript, Firestore (Firebase Admin) for
 storage, and Vercel Cron for scheduling. See [`SPECS.md`](./SPECS.md) for the
 full design contract.
+
+![Dashboard screenshot](screenshot.jpg)
 
 ---
 
@@ -51,7 +53,7 @@ actually published:
 
 ## Prerequisites
 
-You need four external setups (full step-by-step is in `SPECS.md` section 3):
+You need three external setups (full step-by-step is in `SPECS.md` section 3):
 
 1. **Microsoft Entra app registration** (personal To Do is delegated-only):
    - Supported account types: Personal Microsoft accounts (or include orgs).
@@ -70,9 +72,12 @@ You need four external setups (full step-by-step is in `SPECS.md` section 3):
 3. **Firebase (Spark plan):** enable Firestore (Native mode); generate a service
    account private key for the Admin SDK (3 env fields). Firebase is storage
    only - no Cloud Functions.
-4. **Cloudflare Access:** put a self-hosted Access app in front of the
-   deployment hostname and allow only your email. Optionally enforce the
-   `Cf-Access-Jwt-Assertion` header in middleware (see below).
+
+The dashboard (and its API) is gated by a single hard password via HTTP Basic
+Auth: set `DASHBOARD_PASSWORD` and the edge middleware requires it for every
+request except the cron endpoint and static assets. Any username works — only
+the password is checked. Leave `DASHBOARD_PASSWORD` empty to disable the gate
+(e.g. local dev).
 
 ---
 
@@ -96,10 +101,8 @@ your Vercel project for production).
 | `FIREBASE_PROJECT_ID` | yes | Firebase project ID. |
 | `FIREBASE_CLIENT_EMAIL` | yes | Service account client email. |
 | `FIREBASE_PRIVATE_KEY` | yes | Service account private key (keep `\n` escaping; unescaped at runtime). |
-| `ABLY_API_KEY` | no | Only if using Ably push for live updates. |
+| `DASHBOARD_PASSWORD` | no | Hard password gating the dashboard + API (HTTP Basic Auth). Empty disables the gate. |
 | `NOTIFY_WEBHOOK_URL` | no | Webhook (Slack/Discord) for re-auth / failure alerts. |
-| `CF_ACCESS_AUD` | no | Cloudflare Access AUD tag; if set with the team domain, middleware requires the Access header. |
-| `CF_ACCESS_TEAM_DOMAIN` | no | Cloudflare Zero Trust team domain. |
 
 Generate an encryption key:
 
@@ -118,8 +121,6 @@ npm run dev        # http://localhost:3000
 
 Notes for local dev:
 
-- Without `CF_ACCESS_AUD` + `CF_ACCESS_TEAM_DOMAIN`, the middleware stays
-  permissive so you can browse the dashboard directly.
 - The cron endpoint `GET /api/cron/tick` requires
   `Authorization: Bearer ${CRON_SECRET}` even locally:
 
@@ -150,9 +151,7 @@ npm test           # node --test
    ```
 
    Schedule is **UTC**: `0 0 * * *` = 09:00 KST. Adjust to taste.
-4. Put Cloudflare Access in front of the deployment hostname and allow only your
-   email.
-5. Visit `/connections` and connect Microsoft and Threads. Then pick a source
+4. Visit `/connections` and connect Microsoft and Threads. Then pick a source
    list in `/settings`.
 
 ---

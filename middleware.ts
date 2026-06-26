@@ -2,18 +2,41 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Edge middleware.
+ * Edge middleware — a single hard password gate (HTTP Basic Auth) for the
+ * dashboard and its API.
  *
- * - /api/cron/* is protected by CRON_SECRET in its own handler, so it passes
- *   through here unconditionally (Vercel Cron cannot send Cf-Access headers).
- * - Next static assets pass through unconditionally.
- * - Everything else is assumed to sit behind Cloudflare Access. As a lightweight
- *   defence-in-depth check, if CF_ACCESS_AUD and CF_ACCESS_TEAM_DOMAIN are
- *   configured we require the Cf-Access-Jwt-Assertion header to be present.
- *   (Full JWT signature verification against the team's JWKS is intentionally
- *   left out of the edge runtime here; enable it below if desired.)
- * - If Cloudflare Access is not configured, stay permissive so local dev works.
+ * - /api/cron/* is protected by CRON_SECRET in its own handler and is hit by
+ *   Vercel Cron (which sends a Bearer token, not Basic auth), so it passes
+ *   through here unconditionally.
+ * - Next internals / favicon pass through unconditionally.
+ * - Everything else requires `Authorization: Basic` whose password matches
+ *   DASHBOARD_PASSWORD. The username is ignored — only the password is checked.
+ * - If DASHBOARD_PASSWORD is unset/empty, stay permissive so local dev works.
  */
+const REALM = "Thoughts to Threads";
+
+/** Length-independent constant-time string comparison. */
+function safeEqual(a: string, b: string): boolean {
+  const len = Math.max(a.length, b.length);
+  let mismatch = a.length ^ b.length;
+  for (let i = 0; i < len; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+/** Extract the password from an `Authorization: Basic base64(user:pass)` header. */
+function basicAuthPassword(header: string | null): string | null {
+  if (!header || !header.startsWith("Basic ")) return null;
+  try {
+    const decoded = atob(header.slice("Basic ".length).trim());
+    const sep = decoded.indexOf(":");
+    return sep === -1 ? decoded : decoded.slice(sep + 1);
+  } catch {
+    return null;
+  }
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -26,25 +49,20 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const aud = process.env.CF_ACCESS_AUD;
-  const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN;
+  const password = process.env.DASHBOARD_PASSWORD;
 
-  // Only enforce when Cloudflare Access is configured.
-  if (aud && teamDomain) {
-    const assertion = req.headers.get("Cf-Access-Jwt-Assertion");
-    if (!assertion) {
-      return new NextResponse(
-        JSON.stringify({ error: "Cloudflare Access required" }),
-        { status: 403, headers: { "content-type": "application/json" } },
-      );
-    }
-    // NOTE: For full verification, fetch the team JWKS from
-    // `https://${teamDomain}/cdn-cgi/access/certs`, verify the JWT signature,
-    // and assert the `aud` claim contains CF_ACCESS_AUD. Omitted here to keep
-    // the edge runtime dependency-free; presence check above is the gate.
+  // Gate is opt-in: no password configured → stay permissive (local dev).
+  if (!password) return NextResponse.next();
+
+  const supplied = basicAuthPassword(req.headers.get("authorization"));
+  if (supplied !== null && safeEqual(supplied, password)) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  return new NextResponse("Authentication required", {
+    status: 401,
+    headers: { "WWW-Authenticate": `Basic realm="${REALM}", charset="UTF-8"` },
+  });
 }
 
 export const config = {

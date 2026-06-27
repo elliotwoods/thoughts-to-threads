@@ -10,6 +10,7 @@ import {
 import { db } from "./firebase";
 import { encrypt, decrypt } from "./crypto";
 import { composeFullText } from "./post";
+import { syncStatusTransition } from "./syncStatus";
 import {
   DEFAULT_CONFIG,
   type AppConfig,
@@ -185,13 +186,14 @@ export interface SetThoughtInput {
   note: string | null;
   createdAt: Date | string | null;
   listId: string;
-  importStatus: ThoughtStatus;
+  /** Whether the source To Do task is completed (ticked off). */
+  taskCompleted: boolean;
   /** IANA timezone used to derive the year suffix (defaults to UTC). */
   timezone?: string | null;
 }
 
 export async function setThoughtFromTask(input: SetThoughtInput): Promise<void> {
-  const { id, title, note, createdAt, listId, importStatus, timezone } = input;
+  const { id, title, note, createdAt, listId, taskCompleted, timezone } = input;
   const ref = db().collection(THOUGHTS).doc(id);
   const text = composeFullText({ title, note });
   const createdTs = toTs(createdAt);
@@ -220,7 +222,8 @@ export async function setThoughtFromTask(input: SetThoughtInput): Promise<void> 
         ...common,
         createdAt: createdTs,
         year,
-        status: importStatus,
+        // New doc: completed task -> archived, otherwise unpublished.
+        status: syncStatusTransition(null, taskCompleted),
         attempts: 0,
         skip: false,
         lock: null,
@@ -232,7 +235,11 @@ export async function setThoughtFromTask(input: SetThoughtInput): Promise<void> 
         lastError: null,
       });
     } else {
-      // Never downgrade a published thought; leave status untouched on update.
+      // A task ticked off in To Do drops an as-yet-unpublished thought out of the
+      // queue (-> archived). Never downgrade a published/failed/archived thought.
+      const current = (snap.data()?.status ?? "unpublished") as ThoughtStatus;
+      const next = syncStatusTransition(current, taskCompleted);
+      if (next) common.status = next;
       tx.update(ref, common);
     }
   });
@@ -393,16 +400,28 @@ export interface PoolStats {
 }
 
 export async function poolStats(): Promise<PoolStats> {
-  const snap = await db().collection(THOUGHTS).get();
-  const stats: PoolStats = {
-    unpublished: 0,
-    published: 0,
-    archived: 0,
-    failed: 0,
-  };
-  snap.forEach((doc) => {
-    const s = (doc.data().status ?? "unpublished") as ThoughtStatus;
-    if (s in stats) stats[s as keyof PoolStats]++;
+  // Use server-side count() aggregations rather than reading every doc — the
+  // dashboard polls this frequently, and a full-collection scan per poll burns
+  // Firestore read quota. Each count() bills ~1 read instead of one-per-doc.
+  const keys: (keyof PoolStats)[] = [
+    "unpublished",
+    "published",
+    "archived",
+    "failed",
+  ];
+  const counts = await Promise.all(
+    keys.map((s) =>
+      db()
+        .collection(THOUGHTS)
+        .where("status", "==", s)
+        .count()
+        .get()
+        .then((r) => r.data().count)
+    )
+  );
+  const stats: PoolStats = { unpublished: 0, published: 0, archived: 0, failed: 0 };
+  keys.forEach((s, i) => {
+    stats[s] = counts[i];
   });
   return stats;
 }

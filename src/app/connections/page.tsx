@@ -4,7 +4,8 @@
 // buttons are plain links to the server OAuth start routes (which sign state
 // and redirect to the provider). Live connection status comes from /api/status.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { usePollingWhileVisible } from "../components/usePollingWhileVisible";
 
 interface TokenHealth {
   msTokenAgeHrs: number | null;
@@ -42,11 +43,7 @@ export default function ConnectionsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 10_000);
-    return () => clearInterval(id);
-  }, [load]);
+  usePollingWhileVisible(load, 60_000);
 
   return (
     <div>

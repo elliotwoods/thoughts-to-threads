@@ -1,10 +1,11 @@
 "use client";
 
-// Dashboard — polls GET /api/status every ~10s. Shows pool counts, the next
+// Dashboard — polls GET /api/status every ~60s. Shows pool counts, the next
 // scheduled run, token health with re-auth banners, recent posts with
 // permalinks, and the Sync / Publish / Pause-Resume action buttons.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { usePollingWhileVisible } from "./components/usePollingWhileVisible";
 
 interface StatusData {
   pool: {
@@ -61,9 +62,13 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // `fresh` bypasses the server's 60s status cache — used right after an action
+  // so its result shows immediately; routine polling uses the cached path.
+  const load = useCallback(async (fresh = false) => {
     try {
-      const res = await fetch("/api/status", { cache: "no-store" });
+      const res = await fetch(fresh ? "/api/status?fresh=1" : "/api/status", {
+        cache: "no-store",
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Status ${res.status}`);
@@ -75,11 +80,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 10_000);
-    return () => clearInterval(id);
-  }, [load]);
+  usePollingWhileVisible(load, 60_000);
 
   const action = useCallback(
     async (label: string, path: string) => {
@@ -90,7 +91,7 @@ export default function DashboardPage() {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || `Request failed (${res.status})`);
         }
-        await load();
+        await load(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Action failed");
       } finally {

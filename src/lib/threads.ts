@@ -129,8 +129,6 @@ export async function exchangeCodeForLongLived(
     body: form.toString(),
   });
   const shortToken = String(shortRes.access_token ?? "");
-  // user_id may arrive as a number; normalise to string.
-  const userId = String(shortRes.user_id ?? "");
   if (!shortToken) {
     throw new Error("Threads: no short-lived access_token in response");
   }
@@ -147,6 +145,17 @@ export async function exchangeCodeForLongLived(
   const token = String(longRes.access_token ?? "");
   if (!token) {
     throw new Error("Threads: no long-lived access_token in response");
+  }
+
+  // Step 3: resolve the user id from /me. The OAuth `user_id` arrives as a JSON
+  // number, and Threads ids are 17 digits — above 2^53 — so JSON.parse rounds
+  // them (e.g. ...601 -> ...600), which then breaks publishing. /me returns the
+  // id as a string, so it is precise.
+  const meParams = new URLSearchParams({ fields: "id", access_token: token });
+  const me = await graphRequest(`${GRAPH_BASE}/me?${meParams.toString()}`);
+  const userId = String(me.id ?? "");
+  if (!userId) {
+    throw new Error("Threads: could not resolve user id from /me");
   }
 
   return { token, userId };

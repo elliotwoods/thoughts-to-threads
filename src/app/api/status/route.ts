@@ -1,15 +1,20 @@
 // GET /api/status — dashboard data: pool stats, recent posts, token health,
 // current config, and the next scheduled run (next 00:00 UTC). Reads only —
 // never mutates.
+//
+// The Firestore reads are wrapped in unstable_cache (60s) so the dashboard's
+// frequent polling shares one DB refresh per minute instead of scanning the
+// store on every request. A request with `?fresh=1` bypasses the cache — the
+// client uses that right after an action so the user sees the result instantly.
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { unstable_cache } from "next/cache";
 import { getConfig, getTokenState, listPosts, poolStats } from "@/lib/firestore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 /** Long-lived Threads token lifetime (days). */
 const THREADS_TOKEN_DAYS = 60;
 
@@ -29,37 +34,54 @@ function nextMidnightUtc(): string {
   return next.toISOString();
 }
 
-export async function GET() {
+/**
+ * Build the dashboard snapshot from Firestore. Returns only derived, non-secret
+ * fields (counts, post log, token ages/booleans, config) — never raw tokens.
+ */
+async function buildSnapshot() {
+  const [pool, recentPosts, tokens, config] = await Promise.all([
+    poolStats(),
+    listPosts(20),
+    getTokenState(),
+    getConfig(),
+  ]);
+
+  const msTokenAgeHrs = ageHrs(tokens.msTokenUpdatedAt);
+  const threadsTokenAgeHrs = ageHrs(tokens.threadsTokenObtainedAt);
+  const threadsDaysToExpiry =
+    threadsTokenAgeHrs == null
+      ? null
+      : THREADS_TOKEN_DAYS - threadsTokenAgeHrs / 24;
+
+  return {
+    pool,
+    recentPosts,
+    tokens: {
+      msTokenAgeHrs,
+      threadsTokenAgeHrs,
+      threadsDaysToExpiry,
+      msNeedsReauth: tokens.msNeedsReauth,
+      threadsNeedsReauth: tokens.threadsNeedsReauth,
+      msConnected: Boolean(tokens.msRefreshToken),
+      threadsConnected: Boolean(tokens.threadsToken && tokens.threadsUserId),
+    },
+    config,
+  };
+}
+
+/** Cached (≤ once / 60s, shared across all pollers/tabs) variant of the above. */
+const getCachedSnapshot = unstable_cache(buildSnapshot, ["status-snapshot"], {
+  revalidate: 60,
+});
+
+export async function GET(req: NextRequest) {
   try {
-    const [pool, recentPosts, tokens, config] = await Promise.all([
-      poolStats(),
-      listPosts(20),
-      getTokenState(),
-      getConfig(),
-    ]);
-
-    const msTokenAgeHrs = ageHrs(tokens.msTokenUpdatedAt);
-    const threadsTokenAgeHrs = ageHrs(tokens.threadsTokenObtainedAt);
-    const threadsDaysToExpiry =
-      threadsTokenAgeHrs == null
-        ? null
-        : THREADS_TOKEN_DAYS - threadsTokenAgeHrs / 24;
-
-    return NextResponse.json({
-      pool,
-      recentPosts,
-      tokens: {
-        msTokenAgeHrs,
-        threadsTokenAgeHrs,
-        threadsDaysToExpiry,
-        msNeedsReauth: tokens.msNeedsReauth,
-        threadsNeedsReauth: tokens.threadsNeedsReauth,
-        msConnected: Boolean(tokens.msRefreshToken),
-        threadsConnected: Boolean(tokens.threadsToken && tokens.threadsUserId),
-      },
-      config,
-      nextRunIso: nextMidnightUtc(),
-    });
+    // `?fresh=1` skips the cache so a user's own action reflects immediately;
+    // routine polling (no param) is served from the 60s cache.
+    const fresh = new URL(req.url).searchParams.has("fresh");
+    const snap = fresh ? await buildSnapshot() : await getCachedSnapshot();
+    // nextRunIso is clock-derived, not from the DB — compute it fresh either way.
+    return NextResponse.json({ ...snap, nextRunIso: nextMidnightUtc() });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

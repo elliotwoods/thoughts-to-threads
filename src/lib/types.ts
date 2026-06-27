@@ -83,7 +83,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   cadence: "daily",
   postsPerRun: 1,
   onExhaustion: "stop",
-  writeBackComplete: false,
+  writeBackComplete: true,
   paused: false,
   timezone: "Asia/Seoul",
   postTimeJitter: false,

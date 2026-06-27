@@ -198,16 +198,19 @@ interface TodoTask {
   id: string;
   title?: string;
   status?: string;
+  /** "low" | "normal" | "high". A starred task in To Do is "high". */
+  importance?: string;
   body?: { content?: string; contentType?: string } | null;
   createdDateTime?: string;
   lastModifiedDateTime?: string;
 }
 
 /**
- * One-way sync of a To Do list into the thoughts store. Paginates via
- * @odata.nextLink, strips HTML from the note body, imports tasks already
- * completed-in-ToDo as `archived` (don't republish historical items), then
- * archives any previously-seen task absent from this list.
+ * One-way sync of a To Do list into the thoughts store. Considers only starred
+ * (importance "high") tasks. Paginates via @odata.nextLink, strips HTML from the
+ * note body, imports tasks already completed-in-ToDo as `archived` (don't
+ * republish historical items), then archives any previously-seen thought whose
+ * task is now absent or unstarred.
  */
 export async function syncTasks(
   accessToken: string,
@@ -230,12 +233,15 @@ export async function syncTasks(
   while (url) {
     const page: GraphCollection<TodoTask> = await graphGet(url, accessToken);
     for (const task of page.value ?? []) {
+      // Only starred (importance "high") tasks are considered. Non-starred tasks
+      // are skipped entirely, so they are never queued and any previously-imported
+      // thought for them falls out of seenIds and is archived by markArchivedExcept.
+      if (task.importance !== "high") continue;
       seenIds.push(task.id);
       const note = stripHtml(task.body?.content);
-      // Completed-in-ToDo tasks are imported as archived on first sight so we
-      // never publish historical/done items.
-      const importStatus =
-        task.status === "completed" ? "archived" : "unpublished";
+      // A ticked-off task is never published: it imports as archived, and an
+      // already-unpublished thought transitions to archived (see setThoughtFromTask).
+      const taskCompleted = task.status === "completed";
 
       // Detect add vs update for accurate counts without an extra read per task.
       const wasNew = await upsertAndDetectNew({
@@ -244,7 +250,7 @@ export async function syncTasks(
         note: note.length > 0 ? note : null,
         createdAt: task.createdDateTime ?? null,
         listId,
-        importStatus,
+        taskCompleted,
         timezone,
       });
       if (wasNew) added++;

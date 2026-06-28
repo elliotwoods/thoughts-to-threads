@@ -185,11 +185,24 @@ suffix on the last) are exactly what gets posted. Preview equals reality.
   successfully published segment instead of re-posting the whole chain. Combined
   with the transactional lock and terminal `published` status, a thought can't be
   posted twice.
-- **Manual "Publish now" is decoupled from Microsoft.** `POST
-  /api/actions/publish-now` only needs a healthy Threads connection — it does not
-  sync To Do and only touches Microsoft for optional write-back. You can still
-  publish when Microsoft needs re-auth. The scheduled cron tick keeps the strict
-  behaviour (aborts if Microsoft refresh fails).
+- **Last-minute edits are captured at publish time.** Right before a thought is
+  posted, `publishOne` re-fetches that exact To Do task
+  (`refreshThoughtFromTask`) and publishes the freshest title/note. If the task
+  was un-starred, completed, or deleted in To Do since the last sync, it is
+  archived and the **next** thought is posted instead. This applies to both the
+  cron tick and "Publish now".
+- **No live external-edit webhook.** Microsoft Graph change notifications for To
+  Do tasks are **not supported for personal Microsoft accounts** (this app uses
+  the `consumers` tenant), so the app can't be pushed updates when you edit a
+  task. Freshness comes instead from the pre-publish refresh above plus the
+  manual **"Refresh from To Do"** button on the Thoughts page (and "Sync now" on
+  the dashboard), both backed by `POST /api/actions/sync`.
+- **Manual "Publish now" still works when Microsoft is down.** `POST
+  /api/actions/publish-now` only requires a healthy Threads connection. It now
+  attempts a Microsoft refresh (best-effort) so the pre-publish sync and optional
+  write-back can run, but if Microsoft needs re-auth it falls back to the stored
+  content and still publishes. The scheduled cron tick keeps the strict behaviour
+  (aborts if Microsoft refresh fails).
 - **Exhaustion alerts are debounced** (~once per 20h) so a daily cron over an
   empty pool doesn't alert every run; the debounce resets after a successful
   publish.

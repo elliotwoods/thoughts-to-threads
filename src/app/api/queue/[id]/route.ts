@@ -1,12 +1,13 @@
 // POST   /api/queue/[id] — inject a thought into the queue.
-//                          Body: { position: "next" | "last" } (default "next").
-//                          Clears `skip` so the thought is eligible. Replaces the
-//                          old exclusive "pin" action.
+//                          Body: { position: "next" | "last" | <0-based index> }
+//                          (default "next"). A numeric index is used by drag-in
+//                          to drop at a specific slot. Clears `skip` so the
+//                          thought is eligible.
 // DELETE /api/queue/[id] — remove a thought from the queue (stays in the pool).
 
 import { NextResponse } from "next/server";
 import { getConfig, getThought, updateThought } from "@/lib/firestore";
-import { addToQueue, removeFromQueue } from "@/lib/queue";
+import { addToQueue, removeFromQueue, type QueuePosition } from "@/lib/queue";
 import { buildPreview } from "@/lib/post";
 import type { Thought } from "@/lib/types";
 
@@ -24,7 +25,13 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const position = body?.position === "last" ? "last" : "next";
+    const raw = body?.position;
+    const position: QueuePosition =
+      typeof raw === "number" && Number.isFinite(raw)
+        ? Math.floor(raw)
+        : raw === "last"
+          ? "last"
+          : "next";
 
     const thought = await getThought(id);
     if (!thought) {

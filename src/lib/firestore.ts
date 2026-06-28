@@ -93,11 +93,28 @@ export async function updateConfig(
 
 // --- queue order ---------------------------------------------------------
 
-/** Ordered list of thought ids for the "Up Next" queue (config/queue.order). */
-export async function getQueueOrder(): Promise<string[]> {
+/**
+ * The "Up Next" queue order plus whether the doc has ever been written.
+ * `exists` distinguishes a cold start (doc missing) from a deliberately empty
+ * queue (`order: []`) — the queue route refills only on cold start.
+ */
+export async function getQueueState(): Promise<{
+  exists: boolean;
+  order: string[];
+}> {
   const snap = await db().doc(QUEUE_DOC.join("/")).get();
   const order = snap.data()?.order;
-  return Array.isArray(order) ? (order.filter((x) => typeof x === "string") as string[]) : [];
+  return {
+    exists: snap.exists,
+    order: Array.isArray(order)
+      ? (order.filter((x) => typeof x === "string") as string[])
+      : [],
+  };
+}
+
+/** Ordered list of thought ids for the "Up Next" queue (config/queue.order). */
+export async function getQueueOrder(): Promise<string[]> {
+  return (await getQueueState()).order;
 }
 
 export async function setQueueOrder(order: string[]): Promise<void> {

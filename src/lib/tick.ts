@@ -11,20 +11,26 @@ import {
   acquireLock,
   appendPost,
   getConfig,
+  getThought,
   getTokenState,
   releaseLock,
   reshufflePublished,
   updateConfig,
   updateThought,
 } from "./firestore";
-import { completeTask, refreshAccessToken, syncTasks } from "./microsoft";
+import {
+  completeTask,
+  refreshAccessToken,
+  refreshThoughtFromTask,
+  syncTasks,
+} from "./microsoft";
 import {
   isRateLimitError,
   maybeRefreshLongLived,
   publishSegments,
 } from "./threads";
 import { buildSegments, composeFullText } from "./post";
-import { normalizeQueue, rotateToBack } from "./queue";
+import { reconcileQueue, refillQueue, rotateToBack } from "./queue";
 import { notify } from "./notify";
 import type { AppConfig, Thought } from "./types";
 
@@ -37,16 +43,18 @@ const MAX_ATTEMPTS = 3;
 // --- selection (SPECS.md §7.4) ------------------------------------------
 
 /**
- * Select the next thought to publish: the head of the normalized "Up Next"
- * queue (which auto-fills from a random draw of the unpublished, non-skipped
- * pool). Returns null when the pool is empty (after applying the configured
- * exhaustion behaviour).
+ * Select the next thought to publish: the head of the "Up Next" queue. Reconcile
+ * first (honouring a user-reduced queue without topping it back up mid-select);
+ * only when the queue is genuinely empty do we refill from the pool. Returns null
+ * when the pool is empty too (after applying the configured exhaustion behaviour).
  */
 export async function selectThought(
   config: AppConfig
 ): Promise<Thought | null> {
-  const queue = await normalizeQueue(config);
-  if (queue.length > 0) return queue[0];
+  const reconciled = await reconcileQueue(config);
+  if (reconciled.length > 0) return reconciled[0];
+  const refilled = await refillQueue(config);
+  if (refilled.length > 0) return refilled[0];
   return handleExhaustion(config);
 }
 
@@ -63,7 +71,7 @@ export async function handleExhaustion(
       `Thought pool exhausted; reshuffled ${n} published thought(s) back into the pool.`,
       { event: "reshuffle", count: n }
     );
-    const queue = await normalizeQueue(config);
+    const queue = await refillQueue(config);
     return queue.length > 0 ? queue[0] : null;
   }
   // Default: stop. Debounce the alert so a daily cron doesn't fire every run
@@ -122,15 +130,65 @@ export async function publishOne(
 ): Promise<PublishOutcome> {
   const cfg = config ?? (await getConfig());
 
-  const thought = await selectThought(cfg);
-  if (!thought) return { status: "exhausted" };
+  // A pre-publish refresh can archive the selected thought (un-starred /
+  // completed / deleted in To Do). Re-select the next one when that happens,
+  // bounded so a pathological state can't spin forever.
+  const MAX_RESELECT = 10;
+  for (let attempt = 0; attempt < MAX_RESELECT; attempt++) {
+    let thought = await selectThought(cfg);
+    if (!thought) return { status: "exhausted" };
 
-  // Transactional lock: only succeeds if still unpublished and unlocked/stale.
-  const locked = await acquireLock(thought.id, LOCK_TTL_MS);
-  if (!locked) {
-    return { status: "skipped", thoughtId: thought.id, reason: "locked" };
+    // Transactional lock: only succeeds if still unpublished and unlocked/stale.
+    const locked = await acquireLock(thought.id, LOCK_TTL_MS);
+    if (!locked) {
+      return { status: "skipped", thoughtId: thought.id, reason: "locked" };
+    }
+
+    // Sync the exact task right before posting so last-minute To Do edits are
+    // captured. Best-effort: a Graph failure must never block publishing — fall
+    // back to the stored content (mirrors "publish even when Microsoft is down").
+    if (accessToken) {
+      try {
+        const refreshed = await refreshThoughtFromTask(
+          accessToken,
+          thought.listId,
+          thought.id
+        );
+        if (refreshed.gone) {
+          // Already archived inside refreshThoughtFromTask; skip to the next.
+          await releaseLock(thought.id);
+          continue;
+        }
+        // Publish the freshest content.
+        thought = (await getThought(thought.id)) ?? thought;
+      } catch (e) {
+        await notify("Pre-publish To Do refresh failed; posting stored content.", {
+          event: "prepublish_refresh_failed",
+          thoughtId: thought.id,
+          error: errMsg(e),
+        });
+      }
+    }
+
+    const outcome = await publishLocked(thought, cfg, accessToken);
+    return outcome;
   }
 
+  // Exhausted the re-select budget (every candidate was archived on refresh).
+  return { status: "exhausted" };
+}
+
+/**
+ * Publish a thought that has already been selected, locked, and refreshed.
+ * Handles segment composition, the retry-safe two-step publish, write-back, and
+ * lock release. Split out of publishOne so the selection/refresh loop stays
+ * readable.
+ */
+async function publishLocked(
+  thought: Thought,
+  cfg: AppConfig,
+  accessToken?: string
+): Promise<PublishOutcome> {
   try {
     const segments = buildSegments(composeFullText(thought), thought.year);
 
@@ -328,6 +386,10 @@ export async function runTick(
       }
     }
 
+    // Repopulate "Up Next" to queueSize for the next cycle (after consuming this
+    // run's heads). Best-effort — a refill failure must not fail the tick.
+    await refillQueue(config).catch(() => {});
+
     return { ok: true, manual, synced, published, outcomes };
   } catch (e) {
     const message = errMsg(e);
@@ -354,18 +416,17 @@ export async function runManualPublish(): Promise<TickResult> {
     // Refresh the Threads long-lived token if due — required to publish.
     await maybeRefreshLongLived();
 
-    // Microsoft access token is only needed for optional write-back; failing to
-    // get it must not block publishing to Threads.
+    // A Microsoft access token enables the pre-publish To Do refresh (capture
+    // last-minute edits) and optional write-back. Failing to get it must not
+    // block publishing to Threads — fall back to the stored content.
     let accessToken: string | undefined;
-    if (config.writeBackComplete) {
-      try {
-        accessToken = await refreshAccessToken();
-      } catch (e) {
-        await notify(
-          "Manual publish: Microsoft refresh failed; write-back will be skipped.",
-          { event: "manual_ms_refresh_failed", error: errMsg(e) }
-        );
-      }
+    try {
+      accessToken = await refreshAccessToken();
+    } catch (e) {
+      await notify(
+        "Manual publish: Microsoft refresh failed; posting stored content, write-back skipped.",
+        { event: "manual_ms_refresh_failed", error: errMsg(e) }
+      );
     }
 
     const outcomes: PublishOutcome[] = [];
@@ -380,6 +441,10 @@ export async function runManualPublish(): Promise<TickResult> {
         break;
       }
     }
+
+    // Repopulate "Up Next" to queueSize for the next cycle (after consuming this
+    // run's heads). Best-effort — a refill failure must not fail the publish.
+    await refillQueue(config).catch(() => {});
 
     return { ok: true, manual: true, synced: null, published, outcomes };
   } catch (e) {

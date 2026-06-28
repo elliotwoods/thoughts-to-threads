@@ -1,17 +1,31 @@
 // The "Up Next" queue: a Spotify-style, user-orderable view of the thoughts
 // that will publish next. Order is persisted as an array of thought ids in
 // Firestore (config/queue.order); this module is the single source of truth for
-// reading, normalizing, refilling, and mutating it.
+// reading, reconciling, refilling, and mutating it.
 //
 // "Eligible" means a thought is in the active pool: status === "unpublished" and
-// skip === false. The queue only ever contains eligible ids. Reordering and
-// manual injection are sticky; the tail auto-fills with random eligible picks up
-// to config.queueSize, so it always feels like a shuffled upcoming list you can
-// shape. Publishing consumes the head implicitly: a published thought leaves the
-// eligible pool, so the next normalize drops it.
+// skip === false. The queue only ever contains eligible ids.
+//
+// Two distinct operations, deliberately split:
+//   - RECONCILE: drop ids that are no longer eligible, de-duplicate. Used on
+//     reads and on every user mutation. Never adds anything.
+//   - REFILL: reconcile, then top the queue back up to config.queueSize with a
+//     random draw of the pool. Used ONLY by the publish cycle (and cold start).
+// This split is what makes a manual removal "stick": it reduces the count and
+// stays reduced until the next post cycle, which refills to queueSize.
+// Publishing consumes the head implicitly: a published thought leaves the
+// eligible pool, so the next reconcile drops it.
 
 import { getQueueOrder, listThoughts, setQueueOrder } from "./firestore";
+import {
+  insertIndexFor,
+  reconcileOrder,
+  sameOrder,
+  type QueuePosition,
+} from "./queueOrder";
 import type { AppConfig, Thought } from "./types";
+
+export type { QueuePosition } from "./queueOrder";
 
 /** In-place Fisher–Yates shuffle, returning the same array for convenience. */
 function shuffleInPlace<T>(arr: T[]): T[] {
@@ -28,37 +42,47 @@ async function eligiblePool(): Promise<Map<string, Thought>> {
   return new Map(pool.map((t) => [t.id, t]));
 }
 
-function sameOrder(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((id, i) => id === b[i]);
+/** Hydrate an id order against the eligible map (all ids guaranteed present). */
+function hydrate(order: string[], eligible: Map<string, Thought>): Thought[] {
+  return order.map((id) => eligible.get(id)!);
 }
 
 /**
- * Reconcile the persisted order with the live pool and top it up to
- * config.queueSize with random eligible picks. Persists only when the order
- * actually changes. Returns the ordered, hydrated thoughts (the head publishes
- * next). Pass a prebuilt pool to avoid a redundant read.
+ * Reconcile the persisted order with the live pool (drop ineligible, dedupe).
+ * Does NOT top up. Persists only when the order changes. This is the read-time
+ * and mutation-time normaliser. Pass a prebuilt pool to avoid a redundant read.
  */
-export async function normalizeQueue(
+export async function reconcileQueue(
+  _config: AppConfig,
+  pool?: Map<string, Thought>
+): Promise<Thought[]> {
+  const eligible = pool ?? (await eligiblePool());
+  const stored = await getQueueOrder();
+  const order = reconcileOrder(eligible, stored);
+  if (!sameOrder(order, stored)) await setQueueOrder(order);
+  return hydrate(order, eligible);
+}
+
+/**
+ * Reconcile then top the queue up to config.queueSize with a random draw of the
+ * eligible pool. Used by the publish cycle and cold start. Persists when the
+ * order changes (persist-if-changed, so a cold start with an empty pool doesn't
+ * materialise an empty doc that would suppress later auto-fill).
+ */
+export async function refillQueue(
   config: AppConfig,
   pool?: Map<string, Thought>
 ): Promise<Thought[]> {
   const eligible = pool ?? (await eligiblePool());
   const stored = await getQueueOrder();
+  const order = reconcileOrder(eligible, stored);
 
-  // Keep stored ids that are still eligible, in order, de-duplicated.
-  const seen = new Set<string>();
-  const order: string[] = [];
-  for (const id of stored) {
-    if (eligible.has(id) && !seen.has(id)) {
-      seen.add(id);
-      order.push(id);
-    }
-  }
-
-  // Top up the tail with a random draw of the remaining eligible thoughts.
   const target = Math.max(0, Math.floor(config.queueSize || 0));
   if (order.length < target) {
-    const rest = shuffleInPlace([...eligible.keys()].filter((id) => !seen.has(id)));
+    const seen = new Set(order);
+    const rest = shuffleInPlace(
+      [...eligible.keys()].filter((id) => !seen.has(id))
+    );
     for (const id of rest) {
       if (order.length >= target) break;
       order.push(id);
@@ -66,58 +90,80 @@ export async function normalizeQueue(
   }
 
   if (!sameOrder(order, stored)) await setQueueOrder(order);
-  return order.map((id) => eligible.get(id)!);
+  return hydrate(order, eligible);
 }
 
-/** Put a thought at the front ("next") or back ("last") of the queue. */
+/**
+ * Inject a thought into the queue at `position`. Reconcile-only (no top-up) so
+ * adding one thought never balloons the queue to queueSize. If `id` is already
+ * queued it is moved to the new position.
+ */
 export async function addToQueue(
   config: AppConfig,
   id: string,
-  position: "next" | "last"
+  position: QueuePosition,
+  pool?: Map<string, Thought>
 ): Promise<Thought[]> {
-  const eligible = await eligiblePool();
+  const eligible = pool ?? (await eligiblePool());
   if (!eligible.has(id)) {
     // Caller is expected to have cleared skip first; if it's still not eligible
-    // (e.g. already published) there's nothing to queue — just normalize.
-    return normalizeQueue(config, eligible);
+    // (e.g. already published) there's nothing to queue — just reconcile.
+    return reconcileQueue(config, eligible);
   }
-  const current = (await getQueueOrder()).filter((x) => x !== id);
-  const next = position === "next" ? [id, ...current] : [...current, id];
-  await setQueueOrder(next);
-  return normalizeQueue(config, eligible);
+  const stored = await getQueueOrder();
+  const order = reconcileOrder(eligible, stored).filter((x) => x !== id);
+  order.splice(insertIndexFor(position, order.length), 0, id);
+  if (!sameOrder(order, stored)) await setQueueOrder(order);
+  return hydrate(order, eligible);
 }
 
-/** Remove a thought from the queue (it stays in the pool, eligible to refill). */
+/**
+ * Remove a thought from the queue. Reconcile-only — the count stays reduced
+ * until the next publish cycle refills it. The thought remains in the pool.
+ */
 export async function removeFromQueue(
   config: AppConfig,
   id: string
 ): Promise<Thought[]> {
-  const current = await getQueueOrder();
-  if (current.includes(id)) {
-    await setQueueOrder(current.filter((x) => x !== id));
-  }
-  return normalizeQueue(config);
+  const eligible = await eligiblePool();
+  const stored = await getQueueOrder();
+  const order = reconcileOrder(eligible, stored).filter((x) => x !== id);
+  if (!sameOrder(order, stored)) await setQueueOrder(order);
+  return hydrate(order, eligible);
 }
 
 /**
- * Set an explicit order (e.g. after a drag-reorder). Ignores ids that aren't
- * eligible, then normalizes (which re-fills the tail to queueSize).
+ * Set an explicit order (e.g. after a drag-reorder). Honours the requested
+ * order, dropping ineligible ids. Reconcile-only (no top-up).
  */
 export async function reorderQueue(
   config: AppConfig,
-  order: string[]
+  requested: string[]
 ): Promise<Thought[]> {
   const eligible = await eligiblePool();
-  const seen = new Set<string>();
-  const clean: string[] = [];
-  for (const id of order) {
-    if (eligible.has(id) && !seen.has(id)) {
-      seen.add(id);
-      clean.push(id);
-    }
+  const order = reconcileOrder(eligible, requested);
+  await setQueueOrder(order);
+  return hydrate(order, eligible);
+}
+
+/**
+ * Append one random eligible thought that isn't already queued. Safe no-op when
+ * none remain. Reconcile-based — does not top up to queueSize.
+ */
+export async function addRandom(
+  config: AppConfig,
+  pool?: Map<string, Thought>
+): Promise<Thought[]> {
+  const eligible = pool ?? (await eligiblePool());
+  const stored = await getQueueOrder();
+  const order = reconcileOrder(eligible, stored);
+  const seen = new Set(order);
+  const candidates = [...eligible.keys()].filter((id) => !seen.has(id));
+  if (candidates.length > 0) {
+    order.push(candidates[Math.floor(Math.random() * candidates.length)]);
   }
-  await setQueueOrder(clean);
-  return normalizeQueue(config, eligible);
+  if (!sameOrder(order, stored)) await setQueueOrder(order);
+  return hydrate(order, eligible);
 }
 
 /** Redraw the whole queue: a fresh random shuffle of the eligible pool. */
@@ -126,7 +172,7 @@ export async function shuffleQueue(config: AppConfig): Promise<Thought[]> {
   const target = Math.max(0, Math.floor(config.queueSize || 0));
   const order = shuffleInPlace([...eligible.keys()]).slice(0, target);
   await setQueueOrder(order);
-  return normalizeQueue(config, eligible);
+  return hydrate(order, eligible);
 }
 
 /**

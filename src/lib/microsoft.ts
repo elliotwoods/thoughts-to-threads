@@ -10,6 +10,7 @@ import {
   setThoughtFromTask,
   markArchivedExcept,
   getThought,
+  updateThought,
 } from "./firestore";
 import { stripHtml } from "./post";
 import { notify } from "./notify";
@@ -274,6 +275,66 @@ async function upsertAndDetectNew(
   const existing = await getThought(input.id);
   await setThoughtFromTask(input);
   return existing == null;
+}
+
+/** Outcome of a pre-publish single-task refresh. `gone` means the task is no
+ * longer publishable (deleted, un-starred, or completed in To Do) and the
+ * thought has been archived; the caller should select the next one instead. */
+export interface RefreshResult {
+  gone: boolean;
+  reason?: "deleted" | "unstarred" | "completed";
+}
+
+/**
+ * Re-fetch a single To Do task right before publishing so last-minute edits are
+ * reflected in the post. Mirrors the per-task handling in syncTasks: only
+ * starred (importance "high") tasks remain publishable; a deleted, un-starred,
+ * or completed task is archived and reported as `gone` so the caller skips it.
+ */
+export async function refreshThoughtFromTask(
+  accessToken: string,
+  listId: string,
+  taskId: string
+): Promise<RefreshResult> {
+  // Opaque base64 list/task IDs go in the path verbatim.
+  let task: TodoTask;
+  try {
+    task = await graphGet<TodoTask>(
+      `${GRAPH}/me/todo/lists/${listId}/tasks/${taskId}`,
+      accessToken
+    );
+  } catch (e) {
+    // Task removed in To Do -> archive the thought and skip it.
+    if ((e as { status?: number }).status === 404) {
+      await updateThought(taskId, { status: "archived" });
+      return { gone: true, reason: "deleted" };
+    }
+    throw e;
+  }
+
+  // Un-starred since last sync -> no longer in the pool; archive and skip.
+  if (task.importance !== "high") {
+    await updateThought(taskId, { status: "archived" });
+    return { gone: true, reason: "unstarred" };
+  }
+
+  const { timezone } = await getConfig();
+  const note = stripHtml(task.body?.content);
+  const taskCompleted = task.status === "completed";
+
+  // Upsert the freshest title/note/year. A completed task is archived by the
+  // setThoughtFromTask state machine (and reported as gone so we don't post it).
+  await setThoughtFromTask({
+    id: task.id,
+    title: task.title ?? "",
+    note: note.length > 0 ? note : null,
+    createdAt: task.createdDateTime ?? null,
+    listId,
+    taskCompleted,
+    timezone,
+  });
+
+  return taskCompleted ? { gone: true, reason: "completed" } : { gone: false };
 }
 
 /** Write-back: mark a To Do task completed (optional, per config). */

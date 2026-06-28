@@ -147,7 +147,13 @@ export async function publishOne(
     // Sync the exact task right before posting so last-minute To Do edits are
     // captured. Best-effort: a Graph failure must never block publishing — fall
     // back to the stored content (mirrors "publish even when Microsoft is down").
-    if (accessToken) {
+    //
+    // Skip the refresh once a chain is already partway posted: publishSegments
+    // resumes by segment COUNT (alreadyPublishedIds.length), so changing the text
+    // mid-chain would re-segment and post mismatched/duplicated content. An
+    // in-progress chain must finish with the exact content it started with.
+    const chainInProgress = (thought.publishedSegmentIds?.length ?? 0) > 0;
+    if (accessToken && !chainInProgress) {
       try {
         const refreshed = await refreshThoughtFromTask(
           accessToken,

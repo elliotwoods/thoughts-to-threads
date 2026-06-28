@@ -139,9 +139,6 @@ function QueueItem({
       </button>
       <span className="queue-folio">{String(index + 1).padStart(2, "0")}</span>
       <div>
-        <div className="literary">
-          {t.title || <span className="dim">(untitled)</span>}
-        </div>
         <div className="queue-meta">
           <span className="mono">{t.year ?? "—"}</span>
           <span className="sep">·</span>

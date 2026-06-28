@@ -168,14 +168,26 @@ export default function DashboardPage() {
                 disabled={busy !== null}
                 onClick={() => action("sync", "/api/actions/sync")}
               >
-                {busy === "sync" ? "Syncing…" : "Sync now"}
+                {busy === "sync" ? (
+                  <>
+                    <span className="spinner" aria-hidden="true" /> Syncing…
+                  </>
+                ) : (
+                  "Sync now"
+                )}
               </button>
               <button
                 className="btn btn-primary"
                 disabled={busy !== null}
                 onClick={() => action("publish", "/api/actions/publish-now")}
               >
-                {busy === "publish" ? "Publishing…" : "Publish now"}
+                {busy === "publish" ? (
+                  <>
+                    <span className="spinner" aria-hidden="true" /> Publishing…
+                  </>
+                ) : (
+                  "Publish now"
+                )}
               </button>
               {data.config.paused ? (
                 <button
@@ -183,7 +195,13 @@ export default function DashboardPage() {
                   disabled={busy !== null}
                   onClick={() => action("resume", "/api/actions/resume")}
                 >
-                  {busy === "resume" ? "Resuming…" : "Resume"}
+                  {busy === "resume" ? (
+                    <>
+                      <span className="spinner" aria-hidden="true" /> Resuming…
+                    </>
+                  ) : (
+                    "Resume"
+                  )}
                 </button>
               ) : (
                 <button
@@ -191,7 +209,13 @@ export default function DashboardPage() {
                   disabled={busy !== null}
                   onClick={() => action("pause", "/api/actions/pause")}
                 >
-                  {busy === "pause" ? "Pausing…" : "Pause"}
+                  {busy === "pause" ? (
+                    <>
+                      <span className="spinner" aria-hidden="true" /> Pausing…
+                    </>
+                  ) : (
+                    "Pause"
+                  )}
                 </button>
               )}
             </div>

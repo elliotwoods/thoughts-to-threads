@@ -311,7 +311,13 @@ export default function ThoughtsPage() {
 
       <div className="btn-row" style={{ marginBottom: 12 }}>
         <button className="btn" disabled={syncing} onClick={doSync}>
-          {syncing ? "Refreshing…" : "Refresh from To Do"}
+          {syncing ? (
+            <>
+              <span className="spinner" aria-hidden="true" /> Refreshing…
+            </>
+          ) : (
+            "Refresh from To Do"
+          )}
         </button>
       </div>
 
@@ -405,15 +411,10 @@ function PoolItem({
         <span className="pool-handle-spacer" aria-hidden="true" />
       )}
       <div>
-        <div className="pool-titleline">
+        <div className="queue-meta">
           <span className={`badge badge-${t.status}`}>
             {STATUS_LABEL[t.status] ?? t.status}
           </span>
-          <span className="literary">
-            {t.title || <span className="dim">(untitled)</span>}
-          </span>
-        </div>
-        <div className="queue-meta">
           <span className="mono">{t.year ?? "—"}</span>
           <span className="sep">·</span>
           <span>

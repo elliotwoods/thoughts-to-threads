@@ -116,6 +116,26 @@ export function threadsConfig(): ThreadsConfig {
   };
 }
 
+// --- Google OAuth ---
+export interface GoogleOAuthConfig {
+  clientId: string;
+  clientSecret: string;
+}
+export function googleOAuthConfig(): GoogleOAuthConfig {
+  return {
+    clientId: env("GOOGLE_CLIENT_ID"),
+    clientSecret: env("GOOGLE_CLIENT_SECRET"),
+  };
+}
+
+/** Comma-separated list of allowed Google emails; always lowercase. */
+export function allowedEmails(): string[] {
+  return env("ALLOWED_EMAILS")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 // --- Firebase Admin ---
 export interface FirebaseConfig {
   projectId: string;

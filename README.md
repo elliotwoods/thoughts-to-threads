@@ -73,11 +73,15 @@ You need three external setups (full step-by-step is in `SPECS.md` section 3):
    account private key for the Admin SDK (3 env fields). Firebase is storage
    only - no Cloud Functions.
 
-The dashboard (and its API) is gated by a single hard password via HTTP Basic
-Auth: set `DASHBOARD_PASSWORD` and the edge middleware requires it for every
-request except the cron endpoint and static assets. Any username works — only
-the password is checked. Leave `DASHBOARD_PASSWORD` empty to disable the gate
-(e.g. local dev).
+The dashboard is gated by Google OAuth with an email whitelist. Unauthenticated
+requests redirect to `/login`; sign-in issues a 30-day signed HTTP-only session
+cookie. Set `ALLOWED_EMAILS` to a comma-separated list of Google email addresses
+that may sign in. To configure Google OAuth:
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) → APIs &
+   Services → Credentials → Create OAuth 2.0 Client ID (type: **Web application**).
+2. Add `{APP_BASE_URL}/api/auth/google/callback` as an authorised redirect URI.
+3. Copy the client ID and secret into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 
 ---
 
@@ -101,7 +105,9 @@ your Vercel project for production).
 | `FIREBASE_PROJECT_ID` | yes | Firebase project ID. |
 | `FIREBASE_CLIENT_EMAIL` | yes | Service account client email. |
 | `FIREBASE_PRIVATE_KEY` | yes | Service account private key (keep `\n` escaping; unescaped at runtime). |
-| `DASHBOARD_PASSWORD` | no | Hard password gating the dashboard + API (HTTP Basic Auth). Empty disables the gate. |
+| `GOOGLE_CLIENT_ID` | yes | Google OAuth client ID (Web application type). |
+| `GOOGLE_CLIENT_SECRET` | yes | Google OAuth client secret. |
+| `ALLOWED_EMAILS` | yes | Comma-separated Google emails allowed to sign in. |
 | `NOTIFY_WEBHOOK_URL` | no | Webhook (Slack/Discord) for re-auth / failure alerts. |
 
 Generate an encryption key:

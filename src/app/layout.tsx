@@ -43,6 +43,7 @@ export default function RootLayout({
               <Link href="/thoughts">Thoughts</Link>
               <Link href="/settings">Settings</Link>
               <Link href="/connections">Connections</Link>
+              <Link href="/api/auth/signout">Sign out</Link>
             </nav>
           </div>
         </header>

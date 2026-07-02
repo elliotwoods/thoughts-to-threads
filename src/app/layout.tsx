@@ -43,7 +43,9 @@ export default function RootLayout({
               <Link href="/thoughts">Thoughts</Link>
               <Link href="/settings">Settings</Link>
               <Link href="/connections">Connections</Link>
-              <a href="/api/auth/signout">Sign out</a>
+              <form action="/api/auth/signout" method="POST" style={{ display: "contents" }}>
+                <button type="submit">Sign out</button>
+              </form>
             </nav>
           </div>
         </header>

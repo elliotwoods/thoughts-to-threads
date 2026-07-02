@@ -101,6 +101,17 @@ a:hover {
   color: var(--ink);
   text-decoration: none;
 }
+.nav button {
+  all: unset;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+.nav button:hover {
+  color: var(--ink);
+}
 .container {
   max-width: var(--maxw);
   margin: 0 auto;

@@ -388,6 +388,7 @@ function PoolItem({
   onSkip: () => void;
 }) {
   const canQueue = t.status === "unpublished" && !t.skip;
+  const posted = t.status === "published";
   const { listeners, setNodeRef, isDragging } = useDraggable({
     id: POOL_PREFIX + t.id,
     disabled: !canQueue,
@@ -397,7 +398,9 @@ function PoolItem({
   return (
     <li
       ref={setNodeRef}
-      className={`pool-item${isDragging ? " dragging" : ""}`}
+      className={`pool-item${isDragging ? " dragging" : ""}${
+        posted ? " posted" : ""
+      }${queued ? " queued" : ""}`}
     >
       {canQueue ? (
         <button

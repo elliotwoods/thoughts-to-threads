@@ -639,6 +639,18 @@ input[type="checkbox"] {
 .pool-item.dragging {
   opacity: 0.45;
 }
+/* Already posted to Threads — greyed out; it's done. */
+.pool-item.posted {
+  opacity: 0.5;
+}
+.pool-item.posted:hover {
+  opacity: 0.72;
+}
+/* Already in the Up Next queue — a marked, tinted row with a left ink rule. */
+.pool-item.queued {
+  background: var(--paper-tint);
+  box-shadow: inset 2px 0 0 var(--ink-soft);
+}
 .pool-handle,
 .queue-handle {
   appearance: none;

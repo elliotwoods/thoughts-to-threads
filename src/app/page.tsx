@@ -6,6 +6,7 @@
 
 import { useCallback, useState } from "react";
 import { usePollingWhileVisible } from "./components/usePollingWhileVisible";
+import { formatScheduleDays } from "@/lib/schedule";
 
 interface StatusData {
   pool: {
@@ -38,9 +39,10 @@ interface StatusData {
     paused: boolean;
     postsPerRun: number;
     cadence: string;
+    scheduleDays: number[];
     timezone: string;
   };
-  nextRunIso: string;
+  nextRunIso: string | null;
 }
 
 function fmtDateTime(iso: string | null): string {
@@ -221,8 +223,8 @@ export default function DashboardPage() {
             </div>
             <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>
               Next scheduled run: <strong>{fmtDateTime(data.nextRunIso)}</strong>{" "}
-              · {data.config.cadence} · {data.config.postsPerRun} per run ·{" "}
-              {data.config.timezone}
+              · {formatScheduleDays(data.config.scheduleDays)} at 09:00 ·{" "}
+              {data.config.postsPerRun} per run · {data.config.timezone}
             </p>
           </div>
 

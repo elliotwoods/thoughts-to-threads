@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { AppConfig } from "@/lib/types";
+import { WEEKDAYS, formatScheduleDays } from "@/lib/schedule";
 
 interface TodoList {
   id: string;
@@ -60,6 +61,18 @@ export default function SettingsPage() {
 
   const update = <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
     setConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
+    setSaved(false);
+  };
+
+  const toggleDay = (day: number) => {
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const cur = prev.scheduleDays ?? [];
+      const next = cur.includes(day)
+        ? cur.filter((d) => d !== day)
+        : [...cur, day].sort((a, b) => a - b);
+      return { ...prev, scheduleDays: next };
+    });
     setSaved(false);
   };
 
@@ -135,16 +148,34 @@ export default function SettingsPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="cadence">Cadence</label>
-            <select
-              id="cadence"
-              value={config.cadence}
-              onChange={(e) =>
-                update("cadence", e.target.value as AppConfig["cadence"])
-              }
-            >
-              <option value="daily">Daily</option>
-            </select>
+            <label>Publishing schedule</label>
+            <div className="daypicker" role="group" aria-label="Publishing days">
+              {WEEKDAYS.map((w) => {
+                const on = (config.scheduleDays ?? []).includes(w.value);
+                return (
+                  <button
+                    type="button"
+                    key={w.value}
+                    className={`daypicker-day${on ? " on" : ""}`}
+                    aria-pressed={on}
+                    aria-label={w.long}
+                    onClick={() => toggleDay(w.value)}
+                  >
+                    {w.short}
+                  </button>
+                );
+              })}
+            </div>
+            {config.scheduleDays && config.scheduleDays.length > 0 ? (
+              <p className="field-hint">
+                Publishes at <strong>09:00 {config.timezone}</strong> on{" "}
+                {formatScheduleDays(config.scheduleDays)}.
+              </p>
+            ) : (
+              <p className="field-hint">
+                No days selected — nothing will publish on schedule.
+              </p>
+            )}
           </div>
 
           <div className="field">

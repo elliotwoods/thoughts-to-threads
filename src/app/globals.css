@@ -419,6 +419,42 @@ input[type="checkbox"] {
   color: var(--ink-soft);
 }
 
+/* --- Day picker (publishing schedule) ------------------------------------ */
+.daypicker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.daypicker-day {
+  min-width: 48px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  font-family: var(--sans), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.daypicker-day:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.daypicker-day.on {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.field-hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* --- Utility text --------------------------------------------------------- */
 .muted {
   color: var(--muted);

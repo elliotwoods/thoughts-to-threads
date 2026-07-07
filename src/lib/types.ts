@@ -62,6 +62,12 @@ export type OnExhaustion = "stop" | "reshuffle";
 export interface AppConfig {
   sourceListId: string | null;
   cadence: Cadence;
+  /**
+   * Weekdays the scheduled tick is allowed to publish on (0=Sun … 6=Sat),
+   * evaluated in `timezone`. The Vercel cron fires daily at 09:00 KST; the tick
+   * skips days not listed here. Empty = never publish on schedule.
+   */
+  scheduleDays: number[];
   postsPerRun: number;
   onExhaustion: OnExhaustion;
   writeBackComplete: boolean;
@@ -81,6 +87,7 @@ export interface AppConfig {
 export const DEFAULT_CONFIG: AppConfig = {
   sourceListId: null,
   cadence: "daily",
+  scheduleDays: [0, 1, 3], // Sun, Mon, Wed
   postsPerRun: 1,
   onExhaustion: "stop",
   writeBackComplete: true,

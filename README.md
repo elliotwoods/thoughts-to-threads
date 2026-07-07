@@ -16,8 +16,8 @@ full design contract.
 ## What it does
 
 1. One-way sync: a Microsoft To Do list -> internal Firestore store.
-2. Scheduled daily publish of one randomly chosen, not-yet-published thought to
-   Threads.
+2. Scheduled publish of one randomly chosen, not-yet-published thought to
+   Threads on the configured weekdays (default Sun/Mon/Wed at 09:00 KST).
 3. Persistent "no repeat" state with explicit exhaustion behaviour (stop or
    reshuffle).
 4. Dashboard: pool stats, post history, manual sync/publish, pause/resume,
@@ -156,7 +156,14 @@ npm test           # node --test
    { "crons": [ { "path": "/api/cron/tick", "schedule": "0 0 * * *" } ] }
    ```
 
-   Schedule is **UTC**: `0 0 * * *` = 09:00 KST. Adjust to taste.
+   Schedule is **UTC**: `0 0 * * *` = 09:00 KST. The cron fires **every day**;
+   which weekdays actually publish is chosen at runtime in the portal
+   (`/settings` → **Publishing schedule**) and stored in Firestore, so it can be
+   changed without a redeploy. Default is **Sun, Mon, Wed** (`scheduleDays:
+   [0,1,3]`). On off-days the tick returns `{ skipped: "offschedule" }` and posts
+   nothing. The post *time* is fixed at the cron time (09:00 KST) — changing the
+   time requires editing `vercel.json` and redeploying (a Vercel Hobby-plan
+   constraint: crons fire at most once per day).
 4. Visit `/connections` and connect Microsoft and Threads. Then pick a source
    list in `/settings`.
 

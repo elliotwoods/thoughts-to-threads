@@ -10,6 +10,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { unstable_cache } from "next/cache";
 import { getConfig, getTokenState, listPosts, poolStats } from "@/lib/firestore";
+import { nextScheduledRunIso } from "@/lib/schedule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,15 +24,6 @@ function ageHrs(iso: string | null): number | null {
   const t = new Date(iso).getTime();
   if (isNaN(t)) return null;
   return (Date.now() - t) / HOUR_MS;
-}
-
-/** Next 00:00 UTC strictly after now. */
-function nextMidnightUtc(): string {
-  const now = new Date();
-  const next = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0)
-  );
-  return next.toISOString();
 }
 
 /**
@@ -80,8 +72,14 @@ export async function GET(req: NextRequest) {
     // routine polling (no param) is served from the 60s cache.
     const fresh = new URL(req.url).searchParams.has("fresh");
     const snap = fresh ? await buildSnapshot() : await getCachedSnapshot();
-    // nextRunIso is clock-derived, not from the DB — compute it fresh either way.
-    return NextResponse.json({ ...snap, nextRunIso: nextMidnightUtc() });
+    // nextRunIso is clock-derived, not from the DB — compute it fresh either
+    // way, honouring the configured publishing weekdays + timezone.
+    const nextRunIso = nextScheduledRunIso(
+      snap.config.scheduleDays,
+      snap.config.timezone,
+      new Date()
+    );
+    return NextResponse.json({ ...snap, nextRunIso });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

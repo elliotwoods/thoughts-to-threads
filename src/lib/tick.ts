@@ -30,6 +30,7 @@ import {
   publishSegments,
 } from "./threads";
 import { buildSegments, composeFullText } from "./post";
+import { isScheduledDay } from "./schedule";
 import { reconcileQueue, refillQueue, rotateToBack } from "./queue";
 import { notify } from "./notify";
 import type { AppConfig, Thought } from "./types";
@@ -337,7 +338,7 @@ async function publishLocked(
 export interface TickResult {
   ok: boolean;
   manual: boolean;
-  skipped?: "paused" | "reauth";
+  skipped?: "paused" | "reauth" | "offschedule";
   error?: string;
   synced?: { added: number; updated: number; archived: number } | null;
   published: number;
@@ -357,6 +358,12 @@ export async function runTick(
   try {
     const config = await getConfig();
     if (config.paused) return { ...base, skipped: "paused" };
+
+    // Day-of-week gate. The cron fires daily at 09:00 KST; publish only on the
+    // configured weekdays (evaluated in config.timezone). Manual runs bypass it.
+    if (!manual && !isScheduledDay(config.scheduleDays, config.timezone, new Date())) {
+      return { ...base, skipped: "offschedule" };
+    }
 
     const tokens = await getTokenState();
     if (tokens.msNeedsReauth || tokens.threadsNeedsReauth) {

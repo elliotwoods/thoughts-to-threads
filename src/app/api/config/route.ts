@@ -3,6 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { updateConfig } from "@/lib/firestore";
+import { normalizeScheduleDays } from "@/lib/schedule";
 import type { AppConfig } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -28,6 +29,17 @@ export async function PUT(req: Request) {
     }
     if ("cadence" in b && b.cadence === "daily") {
       patch.cadence = "daily";
+    }
+    if ("scheduleDays" in b) {
+      if (!Array.isArray(b.scheduleDays)) {
+        return NextResponse.json(
+          { error: "scheduleDays must be an array of weekday numbers (0–6)" },
+          { status: 400 }
+        );
+      }
+      // Empty is allowed (== never publish on schedule); out-of-range/garbage
+      // entries are dropped, and the result is sorted + de-duplicated.
+      patch.scheduleDays = normalizeScheduleDays(b.scheduleDays);
     }
     if ("postsPerRun" in b) {
       const n = Number(b.postsPerRun);

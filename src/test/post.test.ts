@@ -127,6 +127,8 @@ test("a long emoji-only token hard-splits without breaking surrogate pairs", () 
 test("yearSuffix and composeFullText basics", () => {
   assert.equal(yearSuffix(null), "");
   assert.equal(yearSuffix(2024), " (2024)");
+  // 2020 is a To Do migration artifact -> rendered as "before 2020".
+  assert.equal(yearSuffix(2020), " (<2020)");
   assert.equal(composeFullText({ title: "Title", note: null }), "Title");
   assert.equal(
     composeFullText({ title: "Title", note: "the body" }),

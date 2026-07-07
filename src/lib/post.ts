@@ -53,9 +53,18 @@ export function composeFullText(t: {
   return note ? `${title}\n\n${note}` : title;
 }
 
-/** Year suffix: null year -> ""; otherwise a leading space + (YYYY). */
+/**
+ * Year suffix appended to the last post segment.
+ * - null year -> "" (unknown creation date).
+ * - 2020 is a migration artifact: tasks bulk-imported into Microsoft To Do
+ *   (Wunderlist shut down in 2020) all carry a 2020 createdDateTime, so a "2020"
+ *   year really means "some time before 2020" -> rendered as (<2020).
+ * - any other year -> ` (YYYY)`.
+ */
 export function yearSuffix(year: number | null): string {
-  return year == null ? "" : ` (${year})`;
+  if (year == null) return "";
+  if (year === 2020) return " (<2020)";
+  return ` (${year})`;
 }
 
 /**
